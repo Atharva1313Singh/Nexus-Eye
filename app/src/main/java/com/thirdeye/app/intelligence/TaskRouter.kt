@@ -12,7 +12,7 @@ class TaskRouter(
 
     private val geminiApiClient =
         GeminiApiClient(
-            context
+            context.applicationContext
         )
 
     suspend fun process(
@@ -137,8 +137,7 @@ class TaskRouter(
             if (dateTime != null) {
 
                 return IntelligenceResult(
-                    answer =
-                        dateTime,
+                    answer = dateTime,
                     source =
                         ResponseSource.DEVICE
                 )
@@ -207,9 +206,15 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 3. EXISTING OFFLINE KNOWLEDGE BASE
+         * 3. OFFLINE KNOWLEDGE BASE
          *
-         * Keep the existing local database first.
+         * IMPORTANT:
+         * Offline knowledge is checked BEFORE the current/live
+         * question filter.
+         *
+         * This allows questions already stored in the app's
+         * database to be answered offline even if the question
+         * contains words such as "current", "today", or "now".
          * ==================================================
          */
 
@@ -235,8 +240,7 @@ class TaskRouter(
                 }
 
             return IntelligenceResult(
-                answer =
-                    answer,
+                answer = answer,
                 source =
                     ResponseSource.OFFLINE_DATABASE
             )
@@ -244,7 +248,30 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 4. INTERNET CHECK
+         * 4. CURRENT / LIVE INFORMATION
+         *
+         * This no longer blocks offline answers because the
+         * offline database was checked above.
+         *
+         * Gemini will handle online/current questions below.
+         * ==================================================
+         */
+
+        val isCurrentQuestion =
+            isCurrentInformationQuestion(
+                lower
+            )
+
+        /*
+         * We intentionally do not return "sorry" here.
+         *
+         * Current/live questions need an online intelligence
+         * provider, so they continue to Gemini.
+         */
+
+        /*
+         * ==================================================
+         * 5. INTERNET CHECK
          * ==================================================
          */
 
@@ -257,9 +284,18 @@ class TaskRouter(
 
             return IntelligenceResult(
                 answer =
-                    noInternetMessage(
-                        speechLanguageId
-                    ),
+                    if (isCurrentQuestion) {
+
+                        noInternetMessage(
+                            speechLanguageId
+                        )
+
+                    } else {
+
+                        noInternetMessage(
+                            speechLanguageId
+                        )
+                    },
                 source =
                     ResponseSource.UNKNOWN
             )
@@ -267,12 +303,14 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 5. GEMINI GENERAL INTELLIGENCE
+         * 6. GEMINI AI
          *
-         * This is the missing path in the current app.
+         * Any question not answered by the device tasks,
+         * calculator, or offline database reaches Gemini.
          *
-         * Any question not handled by the existing fast/local
-         * handlers reaches Gemini here when internet is available.
+         * This is the missing connection that caused the
+         * Gemini API key to appear configured but not actually
+         * answer general questions through TaskRouter.
          * ==================================================
          */
 
@@ -280,11 +318,8 @@ class TaskRouter(
             try {
 
                 geminiApiClient.ask(
-                    question =
-                        cleanQuery,
-
-                    speechLanguageId =
-                        speechLanguageId
+                    question = cleanQuery,
+                    speechLanguageId = speechLanguageId
                 )
 
             } catch (_: Exception) {
@@ -293,14 +328,12 @@ class TaskRouter(
             }
 
         if (
-            !geminiAnswer
-                .isNullOrBlank()
+            !geminiAnswer.isNullOrBlank()
         ) {
 
             return IntelligenceResult(
                 answer =
                     geminiAnswer.trim(),
-
                 source =
                     ResponseSource.GEMINI
             )
@@ -308,9 +341,7 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 6. EXISTING WIKIPEDIA FALLBACK
-         *
-         * Keep the existing online fallback after Gemini.
+         * 7. EXISTING WIKIPEDIA ONLINE FALLBACK
          * ==================================================
          */
 
@@ -318,11 +349,8 @@ class TaskRouter(
             try {
 
                 wikipediaFallback.search(
-                    query =
-                        cleanQuery,
-
-                    languageId =
-                        speechLanguageId
+                    query = cleanQuery,
+                    languageId = speechLanguageId
                 )
 
             } catch (_: Exception) {
@@ -343,6 +371,10 @@ class TaskRouter(
                     ResponseSource.UNKNOWN
             )
         }
+
+        /*
+         * Never expose technical failure text.
+         */
 
         if (
             onlineResult.source ==
@@ -378,6 +410,7 @@ class TaskRouter(
         /*
          * Keep real online answers unchanged.
          */
+
         return onlineResult
     }
 
@@ -435,6 +468,76 @@ class TaskRouter(
         }
 
         return null
+    }
+
+    /*
+     * ======================================================
+     * CURRENT / LIVE INFORMATION
+     * ======================================================
+     */
+
+    private fun isCurrentInformationQuestion(
+        query: String
+    ): Boolean {
+
+        val currentTerms =
+            listOf(
+                "current",
+                "currently",
+                "right now",
+                "at present",
+                "latest",
+                "today",
+                "now",
+                "this year",
+                "this month",
+                "this week",
+                "recent",
+                "recently",
+
+                "वर्तमान",
+                "अभी",
+                "इस समय",
+                "आज",
+                "नवीनतम",
+                "हाल का",
+                "हाल ही में"
+            )
+
+        if (
+            !currentTerms.any { term ->
+                query.contains(term)
+            }
+        ) {
+
+            return false
+        }
+
+        val questionPatterns =
+            listOf(
+                "who is",
+                "what is",
+                "what are",
+                "where is",
+                "who are",
+                "which is",
+                "which are",
+                "how is",
+                "how much",
+                "where are",
+
+                "कौन है",
+                "क्या है",
+                "कौन हैं",
+                "कहाँ है",
+                "कितना है",
+                "कितनी है",
+                "कहाँ हैं"
+            )
+
+        return questionPatterns.any { pattern ->
+            query.contains(pattern)
+        }
     }
 
     /*
