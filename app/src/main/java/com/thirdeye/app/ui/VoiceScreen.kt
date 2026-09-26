@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -133,6 +134,16 @@ fun VoiceScreen(
     var errorText by
     remember {
         mutableStateOf("")
+    }
+
+    var pendingDeviceActionQuery by
+    remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var permissionRetryQuery by
+    remember {
+        mutableStateOf<String?>(null)
     }
 
     fun speakPhone(
@@ -253,6 +264,49 @@ fun VoiceScreen(
         }
     }
 
+    val deviceActionPermissionLauncher =
+        rememberLauncherForActivityResult(
+            contract =
+                ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            val pendingQuery =
+                pendingDeviceActionQuery
+
+            pendingDeviceActionQuery =
+                null
+
+            if (pendingQuery.isNullOrBlank()) {
+                return@rememberLauncherForActivityResult
+            }
+
+            val allGranted =
+                permissions.values.all { it }
+
+            if (allGranted) {
+                permissionRetryQuery =
+                    pendingQuery
+            } else {
+                isListening =
+                    false
+
+                isProcessing =
+                    false
+
+                answerText =
+                    if (speechLanguage.id == "hi") {
+                        "आवश्यक अनुमति नहीं मिली।"
+                    } else {
+                        "The required permission was not granted."
+                    }
+
+                sourceText =
+                    "Device action"
+
+                statusText =
+                    "Permission required"
+            }
+        }
+
     fun processVoiceCommand(
         text: String
     ) {
@@ -317,6 +371,28 @@ fun VoiceScreen(
                             speechLanguage.id
                     )
 
+                if (
+                    result.requiredPermissions.isNotEmpty()
+                ) {
+                    pendingDeviceActionQuery =
+                        query
+
+                    answerText =
+                        result.answer
+
+                    sourceText =
+                        "Device action"
+
+                    statusText =
+                        "Permission required"
+
+                    deviceActionPermissionLauncher.launch(
+                        result.requiredPermissions.toTypedArray()
+                    )
+
+                    return@launch
+                }
+
                 answerText =
                     result.answer
 
@@ -333,11 +409,14 @@ fun VoiceScreen(
                         ResponseSource.DEVICE ->
                             "Device"
 
-                        ResponseSource.WIKIPEDIA ->
-                            "Online"
+                        ResponseSource.DEVICE_ACTION ->
+                            "Device action"
 
                         ResponseSource.GEMINI ->
                             "Gemini AI"
+
+                        ResponseSource.WIKIPEDIA ->
+                            "Online"
 
                         ResponseSource.UNKNOWN ->
                             "Unknown"
@@ -375,6 +454,22 @@ fun VoiceScreen(
                 isProcessing =
                     false
             }
+        }
+    }
+
+    LaunchedEffect(
+        permissionRetryQuery
+    ) {
+        val retryQuery =
+            permissionRetryQuery
+
+        if (!retryQuery.isNullOrBlank()) {
+            permissionRetryQuery =
+                null
+
+            processVoiceCommand(
+                retryQuery
+            )
         }
     }
 

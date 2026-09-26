@@ -910,15 +910,6 @@ object OfflineKnowledgeBase {
                 "डेटाबेस डेटा का एक व्यवस्थित संग्रह है जिसे संग्रहीत, प्रबंधित और प्राप्त किया जा सकता है।"
         ),
 
-        OfflineQuestion(
-            keywords = listOf(
-                "what is ram"
-            ),
-            englishAnswer =
-                "RAM is temporary working memory used by a computer while programs are running.",
-            hindiAnswer =
-                "RAM वह अस्थायी कार्यशील मेमोरी है जिसका उपयोग कंप्यूटर प्रोग्राम चलाते समय करता है।"
-        ),
 
         OfflineQuestion(
             keywords = listOf(
@@ -1161,15 +1152,6 @@ object OfflineKnowledgeBase {
                 "जलवायु किसी क्षेत्र में लंबे समय के मौसम के पैटर्न को बताती है।"
         ),
 
-        OfflineQuestion(
-            keywords = listOf(
-                "what is weather"
-            ),
-            englishAnswer =
-                "Weather describes the current atmospheric conditions of a place.",
-            hindiAnswer =
-                "मौसम किसी स्थान की वर्तमान वायुमंडलीय स्थिति को बताता है।"
-        ),
 
         OfflineQuestion(
             keywords = listOf(

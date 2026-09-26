@@ -1,6 +1,7 @@
 package com.thirdeye.app.intelligence
 
 import android.content.Context
+import com.thirdeye.app.device.DeviceActionManager
 import java.util.Locale
 
 class TaskRouter(
@@ -10,9 +11,14 @@ class TaskRouter(
     private val wikipediaFallback =
         WikipediaFallback()
 
+    private val deviceActionManager =
+        DeviceActionManager(
+            context
+        )
+
     private val geminiApiClient =
         GeminiApiClient(
-            context.applicationContext
+            context
         )
 
     suspend fun process(
@@ -42,7 +48,28 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 1. FAST DEVICE TASKS
+         * 1. PHONE / DEVICE ACTIONS
+         * ==================================================
+         */
+
+        val deviceAction =
+            deviceActionManager.tryHandle(
+                query = cleanQuery,
+                speechLanguageId = speechLanguageId
+            )
+
+        if (deviceAction.handled) {
+            return IntelligenceResult(
+                answer = deviceAction.answer,
+                source = ResponseSource.DEVICE_ACTION,
+                requiredPermissions =
+                    deviceAction.requiredPermissions
+            )
+        }
+
+        /*
+         * ==================================================
+         * 2. FAST DEVICE TASKS
          * ==================================================
          */
 
@@ -171,7 +198,7 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 2. CALCULATOR
+         * 3. CALCULATOR
          * ==================================================
          */
 
@@ -206,15 +233,32 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 3. OFFLINE KNOWLEDGE BASE
+         * 4. CURRENT / LIVE INFORMATION
+         * ==================================================
+         */
+
+        if (
+            isCurrentInformationQuestion(
+                lower
+            )
+        ) {
+
+            return IntelligenceResult(
+                answer =
+                    unavailableQuestionMessage(
+                        speechLanguageId
+                    ),
+                source =
+                    ResponseSource.UNKNOWN
+            )
+        }
+
+        /*
+         * ==================================================
+         * 5. EXISTING OFFLINE KNOWLEDGE BASE
          *
-         * IMPORTANT:
-         * Offline knowledge is checked BEFORE the current/live
-         * question filter.
-         *
-         * This allows questions already stored in the app's
-         * database to be answered offline even if the question
-         * contains words such as "current", "today", or "now".
+         * The database itself is NOT replaced.
+         * Only the Hindi response style is changed.
          * ==================================================
          */
 
@@ -248,30 +292,7 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 4. CURRENT / LIVE INFORMATION
-         *
-         * This no longer blocks offline answers because the
-         * offline database was checked above.
-         *
-         * Gemini will handle online/current questions below.
-         * ==================================================
-         */
-
-        val isCurrentQuestion =
-            isCurrentInformationQuestion(
-                lower
-            )
-
-        /*
-         * We intentionally do not return "sorry" here.
-         *
-         * Current/live questions need an online intelligence
-         * provider, so they continue to Gemini.
-         */
-
-        /*
-         * ==================================================
-         * 5. INTERNET CHECK
+         * 6. INTERNET CHECK
          * ==================================================
          */
 
@@ -284,18 +305,9 @@ class TaskRouter(
 
             return IntelligenceResult(
                 answer =
-                    if (isCurrentQuestion) {
-
-                        noInternetMessage(
-                            speechLanguageId
-                        )
-
-                    } else {
-
-                        noInternetMessage(
-                            speechLanguageId
-                        )
-                    },
+                    noInternetMessage(
+                        speechLanguageId
+                    ),
                 source =
                     ResponseSource.UNKNOWN
             )
@@ -303,45 +315,30 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 6. GEMINI AI
-         *
-         * Any question not answered by the device tasks,
-         * calculator, or offline database reaches Gemini.
-         *
-         * This is the missing connection that caused the
-         * Gemini API key to appear configured but not actually
-         * answer general questions through TaskRouter.
+         * 7. GEMINI ONLINE FALLBACK
          * ==================================================
          */
 
         val geminiAnswer =
             try {
-
                 geminiApiClient.ask(
                     question = cleanQuery,
                     speechLanguageId = speechLanguageId
                 )
-
             } catch (_: Exception) {
-
                 null
             }
 
-        if (
-            !geminiAnswer.isNullOrBlank()
-        ) {
-
+        if (!geminiAnswer.isNullOrBlank()) {
             return IntelligenceResult(
-                answer =
-                    geminiAnswer.trim(),
-                source =
-                    ResponseSource.GEMINI
+                answer = geminiAnswer,
+                source = ResponseSource.GEMINI
             )
         }
 
         /*
          * ==================================================
-         * 7. EXISTING WIKIPEDIA ONLINE FALLBACK
+         * 8. WIKIPEDIA FALLBACK
          * ==================================================
          */
 
@@ -375,7 +372,6 @@ class TaskRouter(
         /*
          * Never expose technical failure text.
          */
-
         if (
             onlineResult.source ==
             ResponseSource.UNKNOWN
@@ -410,7 +406,6 @@ class TaskRouter(
         /*
          * Keep real online answers unchanged.
          */
-
         return onlineResult
     }
 
