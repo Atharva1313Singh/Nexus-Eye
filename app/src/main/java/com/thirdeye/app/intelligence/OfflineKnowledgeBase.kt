@@ -232,7 +232,7 @@ object OfflineKnowledgeBase {
                 "who developed you"
             ),
             englishAnswer =
-                "I am part of the NEXUS EYE assistive system made by Atharv Singh.",
+                "I am part of the NEXUS EYE assistive system made by Atharv Singh, Akarsh Singh And Anshuman Tiwari.",
             hindiAnswer =
                 "मैं Atharv Singh द्वारा बनाए गए NEXUS EYE सहायक सिस्टम का हिस्सा हूँ।"
         ),
