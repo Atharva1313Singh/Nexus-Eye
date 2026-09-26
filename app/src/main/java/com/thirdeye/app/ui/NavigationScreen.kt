@@ -1,19 +1,19 @@
 package com.thirdeye.app.ui
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationManager
+import android.os.Handler
 import android.os.Looper
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -23,6 +23,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -43,7 +45,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
+import com.thirdeye.app.navigation.NexusEyeBRouterPoint
 import com.thirdeye.app.navigation.NexusEyeBRouterRoute
 import com.thirdeye.app.navigation.NexusEyeNavigationManager
 import kotlinx.coroutines.delay
@@ -64,7 +66,8 @@ fun NavigationScreen(
     onGoHome: () -> Boolean,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
+    val context =
+        LocalContext.current
 
     var destination by remember {
         mutableStateOf("")
@@ -88,12 +91,39 @@ fun NavigationScreen(
         mutableStateOf(false)
     }
 
-    val locationClient =
-        remember {
-            LocationServices
-                .getFusedLocationProviderClient(
-                    context
+    val locationClient = remember {
+        LocationServices.getFusedLocationProviderClient(context)
+    }
+
+    val locationPermissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            val granted =
+                permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                        permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+            if (granted) {
+                detectCurrentLocation(
+                    context = context,
+                    locationClient = locationClient,
+                    onLocation = { location ->
+                        currentLocation = location
+                        statusText =
+                            "Location detected. Accuracy: ${location.accuracy.toInt()} m"
+                    },
+                    onStatus = { message ->
+                        statusText = message
+                    },
+                    onFinished = {
+                        detectingLocation = false
+                    }
                 )
+            } else {
+                detectingLocation = false
+                statusText =
+                    "Location permission was denied. Enable Precise Location for NEXUS EYE in Android settings."
+            }
         }
 
     val resolvedDestination by
@@ -111,92 +141,19 @@ fun NavigationScreen(
         .isNavigating
         .collectAsState()
 
-    val permissionLauncher =
-        rememberLauncherForActivityResult(
-            contract =
-                ActivityResultContracts
-                    .RequestMultiplePermissions()
-        ) { permissions ->
-
-            val fineGranted =
-                permissions[
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ] == true
-
-            val coarseGranted =
-                permissions[
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                ] == true
-
-            if (
-                fineGranted ||
-                coarseGranted
-            ) {
-                statusText =
-                    "Location permission granted. Detecting your location..."
-
-                detectCurrentLocation(
-                    locationClient = locationClient,
-                    onLocation = { location ->
-                        currentLocation =
-                            location
-
-                        detectingLocation =
-                            false
-
-                        val accuracy =
-                            location.accuracy
-
-                        statusText =
-                            if (
-                                accuracy > 0f
-                            ) {
-                                "Location detected. Accuracy about ${accuracy.toInt()} meters."
-                            } else {
-                                "Location detected."
-                            }
-                    },
-                    onFailure = { message ->
-
-                        detectingLocation =
-                            false
-
-                        statusText =
-                            message
-                    }
-                )
-            } else {
-                detectingLocation =
-                    false
-
-                statusText =
-                    "Location permission was not granted."
-            }
-        }
-
     LaunchedEffect(
         navigationManager
     ) {
         while (true) {
-
-            val managerLocation =
+            currentLocation =
                 navigationManager
                     .currentLocation()
-
-            if (
-                managerLocation != null
-            ) {
-                currentLocation =
-                    managerLocation
-            }
 
             currentRoute =
                 navigationManager
                     .currentRoute()
 
-            delay(
-                1000L
-            )
+            delay(1000L)
         }
     }
 
@@ -234,9 +191,7 @@ fun NavigationScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(
-                        innerPadding
-                    )
+                    .padding(innerPadding)
                     .padding(
                         start = 12.dp,
                         end = 12.dp,
@@ -267,7 +222,6 @@ fun NavigationScreen(
                         .weight(
                             1f
                         ),
-
                 shape =
                     RoundedCornerShape(
                         12.dp
@@ -290,19 +244,12 @@ fun NavigationScreen(
                         update = { view ->
 
                             updateNexusEyeMap(
-                                mapView =
-                                    view,
-
-                                location =
-                                    currentLocation,
-
-                                route =
-                                    currentRoute,
-
+                                mapView = view,
+                                location = currentLocation,
+                                route = currentRoute,
                                 destinationLatitude =
                                     resolvedDestination
                                         ?.latitude,
-
                                 destinationLongitude =
                                     resolvedDestination
                                         ?.longitude
@@ -314,7 +261,8 @@ fun NavigationScreen(
                         modifier =
                             Modifier
                                 .align(
-                                    Alignment.TopStart
+                                    Alignment
+                                        .TopStart
                                 )
                                 .padding(
                                     10.dp
@@ -348,63 +296,29 @@ fun NavigationScreen(
 
             OutlinedButton(
                 onClick = {
+                    if (detectingLocation) return@OutlinedButton
 
-                    if (
-                        hasLocationPermission(
-                            context
-                        )
-                    ) {
-
-                        detectingLocation =
-                            true
-
-                        statusText =
-                            "Detecting your current location..."
+                    if (hasLocationPermission(context)) {
+                        detectingLocation = true
 
                         detectCurrentLocation(
-                            locationClient =
-                                locationClient,
-
+                            context = context,
+                            locationClient = locationClient,
                             onLocation = { location ->
-
-                                currentLocation =
-                                    location
-
-                                detectingLocation =
-                                    false
-
-                                val accuracy =
-                                    location.accuracy
-
+                                currentLocation = location
                                 statusText =
-                                    if (
-                                        accuracy > 0f
-                                    ) {
-                                        "Location detected. Accuracy about ${accuracy.toInt()} meters."
-                                    } else {
-                                        "Location detected."
-                                    }
+                                    "Location detected. Accuracy: ${location.accuracy.toInt()} m"
                             },
-
-                            onFailure = { message ->
-
-                                detectingLocation =
-                                    false
-
-                                statusText =
-                                    message
+                            onStatus = { message ->
+                                statusText = message
+                            },
+                            onFinished = {
+                                detectingLocation = false
                             }
                         )
-
                     } else {
-
-                        detectingLocation =
-                            true
-
-                        statusText =
-                            "Requesting location permission..."
-
-                        permissionLauncher.launch(
+                        detectingLocation = true
+                        locationPermissionLauncher.launch(
                             arrayOf(
                                 Manifest.permission.ACCESS_FINE_LOCATION,
                                 Manifest.permission.ACCESS_COARSE_LOCATION
@@ -412,53 +326,16 @@ fun NavigationScreen(
                         )
                     }
                 },
-
-                enabled =
-                    !detectingLocation,
-
-                modifier =
-                    Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !detectingLocation
             ) {
-
                 Text(
                     text =
-                        if (
-                            detectingLocation
-                        ) {
-                            "Detecting Location..."
+                        if (detectingLocation) {
+                            "Detecting location..."
                         } else {
                             "Detect My Location"
                         }
-                )
-            }
-
-            if (
-                currentLocation != null
-            ) {
-
-                val location =
-                    currentLocation!!
-
-                val accuracyText =
-                    if (
-                        location.accuracy > 0f
-                    ) {
-                        "${location.accuracy.toInt()} m"
-                    } else {
-                        "unknown"
-                    }
-
-                Text(
-                    text =
-                        "Current location: " +
-                                "${location.latitude}, " +
-                                "${location.longitude} " +
-                                "(accuracy $accuracyText)",
-
-                    style =
-                        MaterialTheme
-                            .typography
-                            .bodySmall
                 )
             }
 
@@ -467,8 +344,7 @@ fun NavigationScreen(
                     destination,
 
                 onValueChange = {
-                    destination =
-                        it
+                    destination = it
                 },
 
                 modifier =
@@ -543,7 +419,6 @@ fun NavigationScreen(
 
                     OutlinedButton(
                         onClick = {
-
                             navigationManager
                                 .stopNavigation()
 
@@ -633,7 +508,6 @@ fun NavigationScreen(
                                     "Go Home"
                             )
                         }
-
                     } else {
 
                         Text(
@@ -666,216 +540,148 @@ fun NavigationScreen(
     }
 }
 
-private fun hasLocationPermission(
-    context: Context
-): Boolean {
-
-    val fineGranted =
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) ==
-                PackageManager.PERMISSION_GRANTED
-
-    val coarseGranted =
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) ==
-                PackageManager.PERMISSION_GRANTED
-
-    return fineGranted ||
-            coarseGranted
+private fun hasLocationPermission(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
 }
 
-@SuppressLint("MissingPermission")
 private fun detectCurrentLocation(
+    context: Context,
     locationClient: FusedLocationProviderClient,
     onLocation: (Location) -> Unit,
-    onFailure: (String) -> Unit
+    onStatus: (String) -> Unit,
+    onFinished: () -> Unit
 ) {
+    if (!hasLocationPermission(context)) {
+        onStatus("Location permission is not granted.")
+        onFinished()
+        return
+    }
 
-    val cancellationTokenSource =
-        CancellationTokenSource()
+    val locationManager =
+        context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
 
-    try {
+    val locationEnabled =
+        locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true ||
+                locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
 
-        locationClient
-            .getCurrentLocation(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                cancellationTokenSource
-                    .token
-            )
-            .addOnSuccessListener { location ->
+    if (!locationEnabled) {
+        onStatus("Phone Location is OFF. Turn on Location and try again.")
+        onFinished()
+        return
+    }
 
-                if (
-                    location != null
-                ) {
+    onStatus("Detecting your current location...")
 
-                    onLocation(
-                        location
-                    )
+    val cancellationSource =
+        com.google.android.gms.tasks.CancellationTokenSource()
 
-                } else {
-
-                    requestLocationUpdate(
-                        locationClient =
-                            locationClient,
-
-                        onLocation =
-                            onLocation,
-
-                        onFailure =
-                            onFailure
-                    )
-                }
-            }
-            .addOnFailureListener {
-
-                requestLocationUpdate(
-                    locationClient =
-                        locationClient,
-
-                    onLocation =
-                        onLocation,
-
-                    onFailure =
-                        onFailure
+    locationClient
+        .getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            cancellationSource.token
+        )
+        .addOnSuccessListener { location ->
+            if (location != null) {
+                onLocation(location)
+                onFinished()
+            } else {
+                requestLocationUpdatesFallback(
+                    locationClient = locationClient,
+                    onLocation = onLocation,
+                    onStatus = onStatus,
+                    onFinished = onFinished
                 )
             }
-
-    } catch (
-        securityException: SecurityException
-    ) {
-
-        onFailure(
-            "Location permission is not available. Please allow location access for NEXUS EYE."
-        )
-
-    } catch (
-        exception: Exception
-    ) {
-
-        onFailure(
-            "Unable to start location detection: " +
-                    (
+        }
+        .addOnFailureListener { exception ->
+            requestLocationUpdatesFallback(
+                locationClient = locationClient,
+                onLocation = onLocation,
+                onStatus = { fallbackMessage ->
+                    if (fallbackMessage.isNotBlank()) {
+                        onStatus(fallbackMessage)
+                    } else {
+                        onStatus(
                             exception.message
-                                ?: "unknown location error"
-                            )
-        )
-    }
+                                ?: "Unable to detect your location."
+                        )
+                    }
+                },
+                onFinished = onFinished
+            )
+        }
 }
 
-@SuppressLint("MissingPermission")
-private fun requestLocationUpdate(
+private fun requestLocationUpdatesFallback(
     locationClient: FusedLocationProviderClient,
     onLocation: (Location) -> Unit,
-    onFailure: (String) -> Unit
+    onStatus: (String) -> Unit,
+    onFinished: () -> Unit
 ) {
+    onStatus("Waiting for a fresh GPS location...")
 
     val request =
         LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             1000L
         )
-            .setMinUpdateIntervalMillis(
-                500L
-            )
-            .setWaitForAccurateLocation(
-                true
-            )
-            .setMaxUpdateDelayMillis(
-                2000L
-            )
+            .setMinUpdateIntervalMillis(500L)
+            .setMaxUpdateDelayMillis(2000L)
+            .setWaitForAccurateLocation(true)
             .build()
 
-    var completed =
-        false
+    var delivered = false
 
-    val callback =
-        object : LocationCallback() {
+    val callback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            if (delivered) return
 
-            override fun onLocationResult(
-                result: LocationResult
-            ) {
+            val location =
+                result.lastLocation
+                    ?: return
 
-                if (
-                    completed
-                ) {
-                    return
-                }
-
-                val location =
-                    result.lastLocation
-
-                if (
-                    location != null
-                ) {
-
-                    completed =
-                        true
-
-                    locationClient
-                        .removeLocationUpdates(
-                            this
-                        )
-
-                    onLocation(
-                        location
-                    )
-                }
-            }
+            delivered = true
+            locationClient.removeLocationUpdates(this)
+            onLocation(location)
+            onFinished()
         }
+    }
 
     try {
+        locationClient.requestLocationUpdates(
+            request,
+            callback,
+            Looper.getMainLooper()
+        )
 
-        locationClient
-            .requestLocationUpdates(
-                request,
-                callback,
-                Looper.getMainLooper()
-            )
-            .addOnFailureListener {
-
-                if (
-                    completed
-                ) {
-                    return@addOnFailureListener
-                }
-
-                completed =
-                    true
-
-                locationClient
-                    .removeLocationUpdates(
-                        callback
-                    )
-
-                onFailure(
-                    "Unable to detect your location. " +
-                            "Please make sure Location is turned on."
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!delivered) {
+                delivered = true
+                locationClient.removeLocationUpdates(callback)
+                onStatus(
+                    "Unable to detect your location. Make sure Location and Precise Location are ON, then try again."
                 )
+                onFinished()
             }
-
-    } catch (
-        securityException: SecurityException
-    ) {
-
-        onFailure(
-            "Location permission is not available. Please allow location access for NEXUS EYE."
+        }, 15000L)
+    } catch (securityException: SecurityException) {
+        onStatus(
+            "Location permission is not available. Enable Precise Location for NEXUS EYE."
         )
-
-    } catch (
-        exception: Exception
-    ) {
-
-        onFailure(
-            "Unable to detect your location: " +
-                    (
-                            exception.message
-                                ?: "unknown location error"
-                            )
+        onFinished()
+    } catch (exception: Exception) {
+        onStatus(
+            exception.message
+                ?: "Unable to detect your location."
         )
+        onFinished()
     }
 }
 
@@ -942,7 +748,6 @@ private fun updateNexusEyeMap(
     destinationLatitude: Double?,
     destinationLongitude: Double?
 ) {
-
     val overlays =
         mapView.overlays
 
@@ -1000,13 +805,7 @@ private fun updateNexusEyeMap(
                     "Current location"
 
                 snippet =
-                    if (
-                        location.accuracy > 0f
-                    ) {
-                        "Accuracy about ${location.accuracy.toInt()} meters"
-                    } else {
-                        "You are here"
-                    }
+                    "You are here"
 
                 icon =
                     ContextCompat
