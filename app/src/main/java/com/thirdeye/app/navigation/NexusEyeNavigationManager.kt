@@ -145,9 +145,6 @@ class NexusEyeNavigationManager(
                             .ROUTING_OFFLINE,
 
                         NexusEyeLiveNavigationState
-                            .ROUTING_ONLINE,
-
-                        NexusEyeLiveNavigationState
                             .NAVIGATING,
 
                         NexusEyeLiveNavigationState

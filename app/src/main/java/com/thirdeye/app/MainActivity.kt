@@ -7,8 +7,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.thirdeye.app.audio.NexusEyeTtsManager
 import com.thirdeye.app.bluetooth.NexusEyeBleManager
@@ -31,6 +43,7 @@ import com.thirdeye.app.language.NexusEyeLanguage
 import com.thirdeye.app.language.NexusEyeLanguages
 import com.thirdeye.app.navigation.NexusEyeNavigationManager
 import com.thirdeye.app.navigation.NexusEyeNavigationSettings
+import com.thirdeye.app.security.NexusEyeApiCredentialStore
 import com.thirdeye.app.setup.SetupRole
 import com.thirdeye.app.ui.CommunicationScreen
 import com.thirdeye.app.ui.HomeScreen
@@ -41,7 +54,9 @@ import com.thirdeye.app.ui.SettingsScreen
 import com.thirdeye.app.ui.SetupRoleScreen
 import com.thirdeye.app.ui.VisionScreen
 import com.thirdeye.app.ui.VoiceScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 
 class MainActivity :
     ComponentActivity() {
@@ -167,12 +182,117 @@ class MainActivity :
             )
         }
 
+        val apiCredentialStore =
+            remember {
+
+                NexusEyeApiCredentialStore(
+                    this@MainActivity
+                )
+            }
+
+        var apiKeySetupComplete by
+        remember {
+
+            mutableStateOf(
+                apiCredentialStore
+                    .hasGeminiApiKey()
+            )
+        }
+
+        var mapApiKeySetupComplete by
+        remember {
+
+            mutableStateOf(
+                apiCredentialStore
+                    .hasOnlineNavigationApiKey()
+            )
+        }
+
         var pendingNavigationDestination by
         remember {
 
             mutableStateOf<String?>(
                 null
             )
+        }
+
+        /*
+         * Setup timing.
+         *
+         * These values are measured from the real time the user spends
+         * completing each setup stage. They are not fake download times.
+         */
+        var setupStartedAt by
+        remember {
+
+            mutableStateOf(
+                System.currentTimeMillis()
+            )
+        }
+
+        var completedSetupDurations by
+        remember {
+
+            mutableStateOf(
+                emptyList<Long>()
+            )
+        }
+
+        var setupTimerNow by
+        remember {
+
+            mutableStateOf(
+                System.currentTimeMillis()
+            )
+        }
+
+        val setupGateComplete =
+            setupComplete &&
+                    notificationAccessComplete &&
+                    apiKeySetupComplete &&
+                    mapApiKeySetupComplete
+
+        /*
+         * Keep the setup timer alive while the setup gate is active.
+         */
+        LaunchedEffect(
+            setupGateComplete
+        ) {
+
+            if (!setupGateComplete) {
+
+                while (true) {
+
+                    setupTimerNow =
+                        System.currentTimeMillis()
+
+                    delay(1000L)
+                }
+            }
+        }
+
+        /*
+         * If the user already has all required setup state,
+         * the initialization gate is immediately bypassed.
+         *
+         * Notification access is checked from the actual Android
+         * notification listener state when the setup screen is entered.
+         */
+        LaunchedEffect(
+            setupComplete,
+            apiKeySetupComplete,
+            mapApiKeySetupComplete
+        ) {
+
+            if (
+                setupComplete &&
+                apiKeySetupComplete &&
+                mapApiKeySetupComplete
+            ) {
+
+                notificationAccessComplete =
+                    isNotificationAccessGranted()
+            }
         }
 
         val locationPermissionLauncher =
@@ -236,6 +356,31 @@ class MainActivity :
             }
         }
 
+        fun recordSetupStepCompleted() {
+
+            val now =
+                System.currentTimeMillis()
+
+            val duration =
+                (
+                        now -
+                                setupStartedAt
+                        )
+                    .coerceAtLeast(
+                        1000L
+                    )
+
+            completedSetupDurations =
+                completedSetupDurations +
+                        duration
+
+            setupStartedAt =
+                now
+
+            setupTimerNow =
+                now
+        }
+
         fun requestNavigation(
             destination: String
         ) {
@@ -287,6 +432,28 @@ class MainActivity :
             }
         }
 
+        val completedSteps =
+            listOf(
+                setupComplete,
+                notificationAccessComplete,
+                apiKeySetupComplete,
+                mapApiKeySetupComplete
+            )
+                .count {
+                    it
+                }
+
+        val setupProgress =
+            completedSteps / 4f
+
+        val estimatedRemainingMillis =
+            calculateEstimatedRemainingMillis(
+                completedSetupDurations =
+                    completedSetupDurations,
+                remainingSteps =
+                    4 - completedSteps
+            )
+
         Surface(
             modifier =
                 Modifier.fillMaxSize(),
@@ -299,42 +466,157 @@ class MainActivity :
 
             when {
 
-                !setupComplete -> {
+                !setupGateComplete -> {
 
-                    SetupRoleScreen(
+                    InitializationSetupGateScreen(
 
-                        onRoleSelected = {
-                                selectedRole ->
+                        progress =
+                            setupProgress,
 
-                            role =
-                                selectedRole
+                        completedSteps =
+                            completedSteps,
 
-                            saveRole(
-                                selectedRole
+                        totalSteps =
+                            4,
+
+                        estimatedRemainingMillis =
+                            estimatedRemainingMillis,
+
+                        setupComplete =
+                            setupComplete,
+
+                        notificationAccessComplete =
+                            notificationAccessComplete,
+
+                        apiKeySetupComplete =
+                            apiKeySetupComplete,
+
+                        mapApiKeySetupComplete =
+                            mapApiKeySetupComplete,
+
+                        onContinueSetup = {
+
+                            currentScreen =
+                                AppScreen.HOME
+                        }
+                    )
+
+                    /*
+                     * The actual setup screen is layered below the
+                     * gate state through the stage-specific branches
+                     * below. The gate itself prevents Home from being
+                     * reachable until all stages are complete.
+                     */
+                    when {
+
+                        !setupComplete -> {
+
+                            SetupRoleScreen(
+
+                                onRoleSelected = {
+                                        selectedRole ->
+
+                                    role =
+                                        selectedRole
+
+                                    saveRole(
+                                        selectedRole
+                                    )
+
+                                    recordSetupStepCompleted()
+
+                                    setupComplete =
+                                        true
+
+                                    currentScreen =
+                                        AppScreen.HOME
+                                }
                             )
-
-                            setupComplete =
-                                true
-
-                            currentScreen =
-                                AppScreen.HOME
                         }
-                    )
-                }
 
-                !notificationAccessComplete -> {
+                        !notificationAccessComplete -> {
 
-                    NotificationAccessSetupScreen(
+                            NotificationAccessSetupScreen(
 
-                        onAccessGranted = {
+                                onAccessGranted = {
 
-                            notificationAccessComplete =
-                                true
+                                    recordSetupStepCompleted()
 
-                            currentScreen =
-                                AppScreen.HOME
+                                    notificationAccessComplete =
+                                        true
+
+                                    currentScreen =
+                                        AppScreen.HOME
+                                }
+                            )
                         }
-                    )
+
+                        !apiKeySetupComplete -> {
+
+                            ApiKeySetupScreen(
+
+                                onApiKeySaved = {
+                                        apiKey ->
+
+                                    try {
+
+                                        apiCredentialStore
+                                            .saveGeminiApiKey(
+                                                apiKey
+                                            )
+
+                                        recordSetupStepCompleted()
+
+                                        apiKeySetupComplete =
+                                            true
+
+                                        currentScreen =
+                                            AppScreen.HOME
+
+                                    } catch (_: Exception) {
+
+                                        /*
+                                         * The API-key screen remains
+                                         * active when secure storage fails.
+                                         */
+                                    }
+                                }
+                            )
+                        }
+
+                        !mapApiKeySetupComplete -> {
+
+                            OnlineNavigationApiKeySetupScreen(
+
+                                onApiKeySaved = {
+                                        apiKey ->
+
+                                    try {
+
+                                        apiCredentialStore
+                                            .saveOnlineNavigationApiKey(
+                                                apiKey
+                                            )
+
+                                        recordSetupStepCompleted()
+
+                                        mapApiKeySetupComplete =
+                                            true
+
+                                        currentScreen =
+                                            AppScreen.HOME
+
+                                    } catch (_: Exception) {
+
+                                        /*
+                                         * The map/navigation API-key screen remains
+                                         * active when secure storage fails.
+                                         */
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
 
                 else -> {
@@ -572,6 +854,23 @@ class MainActivity :
                                     notificationAccessComplete =
                                         false
 
+                                    apiKeySetupComplete =
+                                        apiCredentialStore
+                                            .hasGeminiApiKey()
+
+                                    mapApiKeySetupComplete =
+                                        apiCredentialStore
+                                            .hasOnlineNavigationApiKey()
+
+                                    completedSetupDurations =
+                                        emptyList()
+
+                                    setupStartedAt =
+                                        System.currentTimeMillis()
+
+                                    setupTimerNow =
+                                        setupStartedAt
+
                                     currentScreen =
                                         AppScreen.HOME
                                 },
@@ -599,8 +898,34 @@ class MainActivity :
                     destination,
 
                 strideMeters =
-                    navigationSettings.getStrideMeters()
+                    navigationSettings
+                        .getStrideMeters()
             )
+    }
+
+    private fun isNotificationAccessGranted():
+            Boolean {
+
+        return try {
+
+            val enabledListeners =
+                android.provider.Settings
+                    .Secure
+                    .getString(
+                        contentResolver,
+                        "enabled_notification_listeners"
+                    )
+                    ?: return false
+
+            enabledListeners
+                .contains(
+                    packageName
+                )
+
+        } catch (_: Exception) {
+
+            false
+        }
     }
 
     private fun isRoleConfigured():
@@ -714,6 +1039,570 @@ class MainActivity :
             "role"
     }
 }
+
+/*
+ * ------------------------------------------------------------------------
+ * FIRST-RUN INITIALIZATION / SETUP GATE
+ * ------------------------------------------------------------------------
+ */
+
+@Composable
+private fun InitializationSetupGateScreen(
+    progress: Float,
+    completedSteps: Int,
+    totalSteps: Int,
+    estimatedRemainingMillis: Long?,
+    setupComplete: Boolean,
+    notificationAccessComplete: Boolean,
+    apiKeySetupComplete: Boolean,
+    mapApiKeySetupComplete: Boolean,
+    onContinueSetup: () -> Unit
+) {
+
+    /*
+     * This screen deliberately does not contain a close button.
+     *
+     * Android itself can still suspend or destroy an Activity according
+     * to normal operating-system lifecycle rules. The app does not
+     * provide a setup "skip" or "close" action.
+     */
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+
+        verticalArrangement =
+            Arrangement.Center
+    ) {
+
+        Text(
+            text =
+                "NEXUS EYE",
+
+            style =
+                MaterialTheme
+                    .typography
+                    .headlineLarge
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(12.dp)
+        )
+
+        Text(
+            text =
+                "Preparing your app",
+
+            style =
+                MaterialTheme
+                    .typography
+                    .headlineMedium
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(12.dp)
+        )
+
+        Text(
+            text =
+                "Please do not close the app while setup is in progress."
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(24.dp)
+        )
+
+        LinearProgressIndicator(
+            progress = {
+                progress
+                    .coerceIn(
+                        0f,
+                        1f
+                    )
+            },
+
+            modifier =
+                Modifier.fillMaxWidth()
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(12.dp)
+        )
+
+        Text(
+            text =
+                "$completedSteps of $totalSteps setup steps completed"
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(20.dp)
+        )
+
+        SetupStepStatus(
+            title =
+                "Role configuration",
+
+            complete =
+                setupComplete
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(8.dp)
+        )
+
+        SetupStepStatus(
+            title =
+                "Notification access",
+
+            complete =
+                notificationAccessComplete
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(8.dp)
+        )
+
+        SetupStepStatus(
+            title =
+                "Google / Gemini API configuration",
+
+            complete =
+                apiKeySetupComplete
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(8.dp)
+        )
+
+        SetupStepStatus(
+            title =
+                "Map / online navigation API configuration",
+
+            complete =
+                mapApiKeySetupComplete
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(24.dp)
+        )
+
+        Text(
+            text =
+                if (
+                    estimatedRemainingMillis !=
+                    null
+                ) {
+
+                    "Estimated time remaining: ${
+                        formatEstimatedTime(
+                            estimatedRemainingMillis
+                        )
+                    }"
+
+                } else {
+
+                    "Estimated time remaining: Calculating..."
+                },
+
+            style =
+                MaterialTheme
+                    .typography
+                    .bodyLarge
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(8.dp)
+        )
+
+        Text(
+            text =
+                when {
+
+                    !setupComplete ->
+                        "Complete the role setup to continue."
+
+                    !notificationAccessComplete ->
+                        "Grant notification access to continue."
+
+                    !apiKeySetupComplete ->
+                        "Enter and securely save your Gemini API key."
+
+                    !mapApiKeySetupComplete ->
+                        "Enter and securely save your map / online navigation API key."
+
+                    else ->
+                        "Setup complete."
+                }
+        )
+    }
+}
+
+@Composable
+private fun SetupStepStatus(
+    title: String,
+    complete: Boolean
+) {
+
+    Text(
+        text =
+            if (complete) {
+                "✓ $title"
+            } else {
+                "○ $title"
+            },
+
+        style =
+            MaterialTheme
+                .typography
+                .bodyLarge
+    )
+}
+
+private fun calculateEstimatedRemainingMillis(
+    completedSetupDurations: List<Long>,
+    remainingSteps: Int
+): Long? {
+
+    if (
+        remainingSteps <= 0
+    ) {
+
+        return 0L
+    }
+
+    if (
+        completedSetupDurations.isEmpty()
+    ) {
+
+        return null
+    }
+
+    val averageDuration =
+        completedSetupDurations
+            .average()
+            .toLong()
+            .coerceAtLeast(
+                1000L
+            )
+
+    return averageDuration *
+            remainingSteps
+}
+
+private fun formatEstimatedTime(
+    millis: Long
+): String {
+
+    val totalSeconds =
+        ceil(
+            millis
+                .coerceAtLeast(
+                    0L
+                ) /
+                    1000.0
+        )
+            .toLong()
+
+    if (
+        totalSeconds < 60
+    ) {
+
+        return "$totalSeconds seconds"
+    }
+
+    val minutes =
+        totalSeconds / 60
+
+    val seconds =
+        totalSeconds % 60
+
+    return if (
+        seconds == 0L
+    ) {
+
+        "$minutes min"
+
+    } else {
+
+        "$minutes min $seconds sec"
+    }
+}
+
+/*
+ * ------------------------------------------------------------------------
+ * API KEY SETUP
+ * ------------------------------------------------------------------------
+ */
+
+@Composable
+private fun ApiKeySetupScreen(
+    onApiKeySaved: (String) -> Unit
+) {
+
+    var apiKey by
+    remember {
+
+        mutableStateOf("")
+    }
+
+    var errorMessage by
+    remember {
+
+        mutableStateOf("")
+    }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+
+        verticalArrangement =
+            Arrangement.spacedBy(
+                16.dp
+            )
+    ) {
+
+        Text(
+            text =
+                "NEXUS EYE setup",
+
+            style =
+                MaterialTheme
+                    .typography
+                    .headlineLarge
+        )
+
+        Text(
+            text =
+                "Enter your Gemini API key to finish the initial setup. The key will be stored using protected Android Keystore-backed storage."
+        )
+
+        OutlinedTextField(
+            value =
+                apiKey,
+
+            onValueChange = {
+                    value ->
+
+                apiKey =
+                    value
+
+                errorMessage =
+                    ""
+            },
+
+            label = {
+                Text(
+                    "Gemini API key"
+                )
+            },
+
+            singleLine = true,
+
+            visualTransformation =
+                PasswordVisualTransformation(),
+
+            modifier =
+                Modifier.fillMaxWidth()
+        )
+
+        if (
+            errorMessage.isNotBlank()
+        ) {
+
+            Text(
+                text =
+                    errorMessage,
+
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .error
+            )
+        }
+
+        Button(
+            onClick = {
+
+                val cleanKey =
+                    apiKey.trim()
+
+                if (
+                    cleanKey.isBlank()
+                ) {
+
+                    errorMessage =
+                        "Please enter your Gemini API key."
+
+                } else {
+
+                    try {
+
+                        onApiKeySaved(
+                            cleanKey
+                        )
+
+                    } catch (_: Exception) {
+
+                        errorMessage =
+                            "The API key could not be saved. Please try again."
+                    }
+                }
+            },
+
+            modifier =
+                Modifier.fillMaxWidth()
+        ) {
+
+            Text(
+                "SAVE API KEY AND CONTINUE"
+            )
+        }
+    }
+}
+
+@Composable
+private fun OnlineNavigationApiKeySetupScreen(
+    onApiKeySaved: (String) -> Unit
+) {
+
+    var apiKey by
+    remember {
+        mutableStateOf("")
+    }
+
+    var errorMessage by
+    remember {
+        mutableStateOf("")
+    }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+
+        verticalArrangement =
+            Arrangement.spacedBy(16.dp)
+    ) {
+
+        Text(
+            text =
+                "NEXUS EYE map setup",
+
+            style =
+                MaterialTheme
+                    .typography
+                    .headlineLarge
+        )
+
+        Text(
+            text =
+                "Enter your OpenRouteService API key to enable online map routing when offline BRouter routing cannot calculate a route. The key will be stored using protected Android Keystore-backed storage."
+        )
+
+        OutlinedTextField(
+            value =
+                apiKey,
+
+            onValueChange = {
+                    value ->
+
+                apiKey =
+                    value
+
+                errorMessage =
+                    ""
+            },
+
+            label = {
+                Text(
+                    "OpenRouteService API key"
+                )
+            },
+
+            singleLine = true,
+
+            visualTransformation =
+                PasswordVisualTransformation(),
+
+            modifier =
+                Modifier.fillMaxWidth()
+        )
+
+        if (
+            errorMessage.isNotBlank()
+        ) {
+
+            Text(
+                text =
+                    errorMessage,
+
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .error
+            )
+        }
+
+        Button(
+            onClick = {
+
+                val cleanKey =
+                    apiKey.trim()
+
+                if (
+                    cleanKey.isBlank()
+                ) {
+
+                    errorMessage =
+                        "Please enter your OpenRouteService API key."
+
+                } else {
+
+                    try {
+
+                        onApiKeySaved(
+                            cleanKey
+                        )
+
+                    } catch (_: Exception) {
+
+                        errorMessage =
+                            "The map API key could not be saved. Please try again."
+                    }
+                }
+            },
+
+            modifier =
+                Modifier.fillMaxWidth()
+        ) {
+
+            Text(
+                "SAVE MAP API KEY AND FINISH SETUP"
+            )
+        }
+    }
+}
+
+/*
+ * ------------------------------------------------------------------------
+ * APP SCREENS
+ * ------------------------------------------------------------------------
+ */
 
 private enum class AppScreen {
 

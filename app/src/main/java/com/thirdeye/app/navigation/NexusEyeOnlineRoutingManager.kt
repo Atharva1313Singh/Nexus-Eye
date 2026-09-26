@@ -9,13 +9,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.math.max
 
 class NexusEyeOnlineRoutingManager(
     private val credentialStore: NexusEyeApiCredentialStore
 ) {
 
     companion object {
-
         private const val DIRECTIONS_URL =
             "https://api.heigit.org/openrouteservice/v2/directions/foot-walking"
 
@@ -23,9 +23,8 @@ class NexusEyeOnlineRoutingManager(
             20_000L
     }
 
-    fun isConfigured(): Boolean {
-        return credentialStore.hasOnlineNavigationApiKey()
-    }
+    fun isConfigured(): Boolean =
+        credentialStore.hasOnlineNavigationApiKey()
 
     suspend fun calculateRoute(
         start: Location,
@@ -33,132 +32,183 @@ class NexusEyeOnlineRoutingManager(
         destinationLongitude: Double
     ): NexusEyeBRouterRoute {
 
-        require(start.latitude.isFinite()) {
-            "Current latitude is invalid."
-        }
-
-        require(start.longitude.isFinite()) {
-            "Current longitude is invalid."
-        }
-
-        require(destinationLatitude.isFinite()) {
-            "Destination latitude is invalid."
-        }
-
-        require(destinationLongitude.isFinite()) {
-            "Destination longitude is invalid."
-        }
-
         val apiKey =
             credentialStore.getOnlineNavigationApiKey()
                 ?: throw IllegalStateException(
-                    "Online navigation API key is not configured."
+                    "Online navigation is not configured. Add an OpenRouteService API key in Settings."
                 )
 
-        val body = JSONObject().apply {
-            put(
-                "coordinates",
-                JSONArray().apply {
-                    put(
-                        JSONArray().apply {
-                            put(start.longitude)
-                            put(start.latitude)
-                        }
-                    )
-                    put(
-                        JSONArray().apply {
-                            put(destinationLongitude)
-                            put(destinationLatitude)
-                        }
-                    )
-                }
-            )
-            put("instructions", false)
-            put("geometry", true)
-        }.toString()
-
-        val response =
-            withTimeout(REQUEST_TIMEOUT_MS) {
-                withContext(Dispatchers.IO) {
-                    request(
-                        apiKey = apiKey,
-                        body = body
-                    )
-                }
+        return withTimeout(
+            REQUEST_TIMEOUT_MS
+        ) {
+            withContext(
+                Dispatchers.IO
+            ) {
+                requestRoute(
+                    apiKey = apiKey,
+                    startLatitude = start.latitude,
+                    startLongitude = start.longitude,
+                    destinationLatitude = destinationLatitude,
+                    destinationLongitude = destinationLongitude
+                )
             }
-
-        return parseRoute(response)
+        }
     }
 
-    private fun request(
+    private fun requestRoute(
         apiKey: String,
-        body: String
-    ): String {
+        startLatitude: Double,
+        startLongitude: Double,
+        destinationLatitude: Double,
+        destinationLongitude: Double
+    ): NexusEyeBRouterRoute {
 
         val connection =
-            (URL(DIRECTIONS_URL).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = REQUEST_TIMEOUT_MS.toInt()
-                readTimeout = REQUEST_TIMEOUT_MS.toInt()
-                doOutput = true
-                setRequestProperty(
-                    "Authorization",
-                    apiKey
-                )
-                setRequestProperty(
-                    "Content-Type",
-                    "application/json"
-                )
-                setRequestProperty(
-                    "Accept",
-                    "application/geo+json, application/json"
-                )
-            }
+            (
+                    URL(
+                        DIRECTIONS_URL
+                    ).openConnection() as HttpURLConnection
+                    ).apply {
 
-        return try {
-            connection.outputStream.use { output ->
-                output.write(
-                    body.toByteArray(Charsets.UTF_8)
-                )
-            }
+                    requestMethod =
+                        "POST"
 
-            val statusCode =
-                connection.responseCode
+                    connectTimeout =
+                        REQUEST_TIMEOUT_MS.toInt()
 
-            val stream =
-                if (statusCode in 200..299) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream
+                    readTimeout =
+                        REQUEST_TIMEOUT_MS.toInt()
+
+                    doOutput =
+                        true
+
+                    setRequestProperty(
+                        "Authorization",
+                        apiKey
+                    )
+
+                    setRequestProperty(
+                        "Content-Type",
+                        "application/json"
+                    )
+
+                    setRequestProperty(
+                        "Accept",
+                        "application/geo+json, application/json"
+                    )
                 }
 
+        try {
+
+            val requestBody =
+                JSONObject().apply {
+
+                    put(
+                        "coordinates",
+                        JSONArray().apply {
+
+                            put(
+                                JSONArray().apply {
+                                    put(
+                                        startLongitude
+                                    )
+                                    put(
+                                        startLatitude
+                                    )
+                                }
+                            )
+
+                            put(
+                                JSONArray().apply {
+                                    put(
+                                        destinationLongitude
+                                    )
+                                    put(
+                                        destinationLatitude
+                                    )
+                                }
+                            )
+                        }
+                    )
+
+                    put(
+                        "instructions",
+                        false
+                    )
+
+                    put(
+                        "geometry",
+                        true
+                    )
+                }
+
+            connection.outputStream.use { output ->
+
+                output.write(
+                    requestBody
+                        .toString()
+                        .toByteArray(
+                            Charsets.UTF_8
+                        )
+                )
+
+                output.flush()
+            }
+
+            val responseCode =
+                connection.responseCode
+
             val responseText =
-                stream?.bufferedReader(Charsets.UTF_8)?.use {
-                    it.readText()
-                }.orEmpty()
+                if (
+                    responseCode in 200..299
+                ) {
 
-            if (statusCode !in 200..299) {
-                val detail =
-                    extractErrorMessage(responseText)
+                    connection
+                        .inputStream
+                        .bufferedReader()
+                        .use {
+                            it.readText()
+                        }
 
-                throw IllegalStateException(
-                    if (detail.isNullOrBlank()) {
-                        "Online routing request failed with HTTP $statusCode."
+                } else {
+
+                    val errorStream =
+                        connection.errorStream
+
+                    if (
+                        errorStream != null
+                    ) {
+
+                        errorStream
+                            .bufferedReader()
+                            .use {
+                                it.readText()
+                            }
+
                     } else {
-                        "Online routing request failed: $detail"
+
+                        ""
                     }
-                )
-            }
+                }
 
-            if (responseText.isBlank()) {
+            if (
+                responseCode !in 200..299
+            ) {
+
                 throw IllegalStateException(
-                    "Online routing returned an empty response."
+                    "Online routing request failed (HTTP $responseCode). " +
+                            extractErrorMessage(
+                                responseText
+                            )
                 )
             }
 
-            responseText
+            return parseRoute(
+                responseText
+            )
 
         } finally {
+
             connection.disconnect()
         }
     }
@@ -169,108 +219,151 @@ class NexusEyeOnlineRoutingManager(
 
         val root =
             try {
-                JSONObject(responseText)
-            } catch (exception: Exception) {
+
+                JSONObject(
+                    responseText
+                )
+
+            } catch (_: Exception) {
+
                 throw IllegalStateException(
-                    "Online routing returned invalid JSON.",
-                    exception
+                    "Online routing returned an invalid response."
                 )
             }
 
         val features =
-            root.optJSONArray("features")
+            root.optJSONArray(
+                "features"
+            )
                 ?: throw IllegalStateException(
-                    "Online routing response contains no route features."
+                    extractErrorMessage(
+                        responseText
+                    )
                 )
 
-        if (features.length() == 0) {
+        if (
+            features.length() == 0
+        ) {
+
             throw IllegalStateException(
                 "Online routing returned no route."
             )
         }
 
         val feature =
-            features.optJSONObject(0)
+            features.optJSONObject(
+                0
+            )
                 ?: throw IllegalStateException(
                     "Online routing returned an invalid route feature."
                 )
 
         val geometry =
-            feature.optJSONObject("geometry")
+            feature.optJSONObject(
+                "geometry"
+            )
                 ?: throw IllegalStateException(
-                    "Online routing response contains no route geometry."
+                    "Online routing returned no route geometry."
                 )
 
         val coordinates =
-            geometry.optJSONArray("coordinates")
+            geometry.optJSONArray(
+                "coordinates"
+            )
                 ?: throw IllegalStateException(
-                    "Online routing response contains no route coordinates."
+                    "Online routing returned no route coordinates."
                 )
 
         val points =
-            ArrayList<NexusEyeBRouterPoint>()
+            ArrayList<NexusEyeBRouterPoint>(
+                coordinates.length()
+            )
 
-        for (index in 0 until coordinates.length()) {
-            val coordinate =
-                coordinates.optJSONArray(index)
+        for (
+        index in
+        0 until coordinates.length()
+        ) {
+
+            val pair =
+                coordinates.optJSONArray(
+                    index
+                )
                     ?: continue
 
-            if (coordinate.length() < 2) {
+            if (
+                pair.length() < 2
+            ) {
                 continue
             }
 
             val longitude =
-                coordinate.optDouble(0, Double.NaN)
+                pair.optDouble(
+                    0,
+                    Double.NaN
+                )
 
             val latitude =
-                coordinate.optDouble(1, Double.NaN)
+                pair.optDouble(
+                    1,
+                    Double.NaN
+                )
 
             if (
-                longitude.isFinite() &&
-                latitude.isFinite() &&
-                latitude in -90.0..90.0 &&
-                longitude in -180.0..180.0
+                !latitude.isFinite() ||
+                !longitude.isFinite()
             ) {
-                points +=
-                    NexusEyeBRouterPoint(
-                        latitude = latitude,
-                        longitude = longitude
-                    )
+                continue
             }
+
+            if (
+                latitude !in -90.0..90.0 ||
+                longitude !in -180.0..180.0
+            ) {
+                continue
+            }
+
+            points +=
+                NexusEyeBRouterPoint(
+                    latitude =
+                        latitude,
+                    longitude =
+                        longitude
+                )
         }
 
-        if (points.size < 2) {
+        if (
+            points.size < 2
+        ) {
+
             throw IllegalStateException(
                 "Online routing returned too few route points."
             )
         }
 
-        val summary =
-            feature.optJSONObject("properties")
-                ?.optJSONObject("summary")
+        val distanceMeters =
+            calculateRouteDistance(
+                points
+            )
 
-        val reportedDistance =
-            summary?.optDouble(
-                "distance",
-                Double.NaN
-            ) ?: Double.NaN
+        if (
+            !distanceMeters.isFinite() ||
+            distanceMeters <= 0.0
+        ) {
 
-        val distance =
-            if (reportedDistance.isFinite() && reportedDistance > 0.0) {
-                reportedDistance
-            } else {
-                calculateRouteDistance(points)
-            }
-
-        if (!distance.isFinite() || distance <= 0.0) {
             throw IllegalStateException(
                 "Online routing returned an invalid route distance."
             )
         }
 
         return NexusEyeBRouterRoute(
-            points = points,
-            distanceMeters = distance
+            points =
+                points,
+
+            distanceMeters =
+                max(
+                    0.1,
+                    distanceMeters
+                )
         )
     }
 
@@ -278,48 +371,115 @@ class NexusEyeOnlineRoutingManager(
         points: List<NexusEyeBRouterPoint>
     ): Double {
 
-        var total = 0.0
+        var totalDistance =
+            0.0
 
-        for (index in 1 until points.size) {
-            val result = FloatArray(1)
+        for (
+        index in
+        1 until points.size
+        ) {
+
+            val previous =
+                points[
+                    index - 1
+                ]
+
+            val current =
+                points[
+                    index
+                ]
+
+            val result =
+                FloatArray(
+                    1
+                )
 
             Location.distanceBetween(
-                points[index - 1].latitude,
-                points[index - 1].longitude,
-                points[index].latitude,
-                points[index].longitude,
+                previous.latitude,
+                previous.longitude,
+                current.latitude,
+                current.longitude,
                 result
             )
 
-            total += result[0].toDouble()
+            val segmentDistance =
+                result[0]
+                    .toDouble()
+
+            if (
+                segmentDistance.isFinite()
+            ) {
+
+                totalDistance +=
+                    segmentDistance
+            }
         }
 
-        return total
+        return totalDistance
     }
 
     private fun extractErrorMessage(
         responseText: String
-    ): String? {
+    ): String {
 
-        if (responseText.isBlank()) {
-            return null
+        if (
+            responseText.isBlank()
+        ) {
+
+            return "No error details were returned."
         }
 
         return try {
-            val json = JSONObject(responseText)
 
-            json.optString("error", null)
-                ?.takeIf { it.isNotBlank() }
-                ?: json.optString("message", null)
-                    ?.takeIf { it.isNotBlank() }
-                ?: json.optJSONObject("error")
-                    ?.optString("message", null)
-                    ?.takeIf { it.isNotBlank() }
+            val json =
+                JSONObject(
+                    responseText
+                )
+
+            val error =
+                json.optJSONObject(
+                    "error"
+                )
+
+            val message =
+                error
+                    ?.optString(
+                        "message"
+                    )
+                    .orEmpty()
+
+            if (
+                message.isNotBlank()
+            ) {
+
+                message
+
+            } else {
+
+                json.optString(
+                    "message"
+                ).ifBlank {
+
+                    responseText
+                        .take(
+                            240
+                        )
+                }
+            }
+
         } catch (_: Exception) {
+
             responseText
+                .replace(
+                    Regex(
+                        "\\s+"
+                    ),
+                    " "
+                )
                 .trim()
-                .replace(Regex("\\s+"), " ")
-                .take(240)
+                .take(
+                    240
+                )
         }
     }
 }
