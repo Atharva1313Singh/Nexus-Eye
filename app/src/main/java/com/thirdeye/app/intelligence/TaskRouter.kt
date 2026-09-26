@@ -54,14 +54,16 @@ class TaskRouter(
 
         val deviceAction =
             deviceActionManager.tryHandle(
-                query = cleanQuery,
-                speechLanguageId = speechLanguageId
+                query = cleanQuery
             )
 
         if (deviceAction.handled) {
+
             return IntelligenceResult(
-                answer = deviceAction.answer,
-                source = ResponseSource.DEVICE_ACTION,
+                answer =
+                    deviceAction.answer,
+                source =
+                    ResponseSource.DEVICE_ACTION,
                 requiredPermissions =
                     deviceAction.requiredPermissions
             )
@@ -164,7 +166,8 @@ class TaskRouter(
             if (dateTime != null) {
 
                 return IntelligenceResult(
-                    answer = dateTime,
+                    answer =
+                        dateTime,
                     source =
                         ResponseSource.DEVICE
                 )
@@ -256,9 +259,6 @@ class TaskRouter(
         /*
          * ==================================================
          * 5. EXISTING OFFLINE KNOWLEDGE BASE
-         *
-         * The database itself is NOT replaced.
-         * Only the Hindi response style is changed.
          * ==================================================
          */
 
@@ -284,7 +284,8 @@ class TaskRouter(
                 }
 
             return IntelligenceResult(
-                answer = answer,
+                answer =
+                    answer,
                 source =
                     ResponseSource.OFFLINE_DATABASE
             )
@@ -321,18 +322,28 @@ class TaskRouter(
 
         val geminiAnswer =
             try {
+
                 geminiApiClient.ask(
-                    question = cleanQuery,
-                    speechLanguageId = speechLanguageId
+                    question =
+                        cleanQuery,
+                    speechLanguageId =
+                        speechLanguageId
                 )
+
             } catch (_: Exception) {
+
                 null
             }
 
-        if (!geminiAnswer.isNullOrBlank()) {
+        if (
+            !geminiAnswer.isNullOrBlank()
+        ) {
+
             return IntelligenceResult(
-                answer = geminiAnswer,
-                source = ResponseSource.GEMINI
+                answer =
+                    geminiAnswer,
+                source =
+                    ResponseSource.GEMINI
             )
         }
 
@@ -346,8 +357,10 @@ class TaskRouter(
             try {
 
                 wikipediaFallback.search(
-                    query = cleanQuery,
-                    languageId = speechLanguageId
+                    query =
+                        cleanQuery,
+                    languageId =
+                        speechLanguageId
                 )
 
             } catch (_: Exception) {
@@ -369,9 +382,6 @@ class TaskRouter(
             )
         }
 
-        /*
-         * Never expose technical failure text.
-         */
         if (
             onlineResult.source ==
             ResponseSource.UNKNOWN
@@ -406,6 +416,7 @@ class TaskRouter(
         /*
          * Keep real online answers unchanged.
          */
+
         return onlineResult
     }
 
