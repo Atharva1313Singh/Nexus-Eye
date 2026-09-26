@@ -1590,11 +1590,52 @@ object OfflineKnowledgeBase {
 
             for (keyword in question.keywords) {
 
+                val normalizedKeyword =
+                    normalize(keyword)
+
+                val keywordWords =
+                    meaningfulWords(normalizedKeyword)
+
                 val score =
                     meaningfulWordScore(
                         normalizedQuery,
-                        normalize(keyword)
+                        normalizedKeyword
                     )
+
+                /*
+                 * IMPORTANT: Do not let a generic single word such as
+                 * "capital", "national", "country", or "planet" select
+                 * the wrong database entry.
+                 *
+                 * For a multi-word keyword, at least TWO meaningful words
+                 * must match. This means:
+                 *
+                 *   "capital of Bangladesh"
+                 *
+                 * can match the Bangladesh entry because both
+                 * "capital" and "bangladesh" match, but it cannot match
+                 * the India entry merely because "capital" matches.
+                 *
+                 * Single-word keywords are still allowed to match normally
+                 * so entries such as "bluetooth", "photosynthesis", or
+                 * "hello" continue to work.
+                 */
+                val minimumMatchedWords =
+                    if (keywordWords.size >= 2) {
+                        2
+                    } else {
+                        1
+                    }
+
+                val matchedWords =
+                    matchedMeaningfulWordCount(
+                        normalizedQuery,
+                        normalizedKeyword
+                    )
+
+                if (matchedWords < minimumMatchedWords) {
+                    continue
+                }
 
                 if (score > bestScore) {
 
@@ -1605,9 +1646,14 @@ object OfflineKnowledgeBase {
         }
 
         /*
-         * Require a meaningful match.
+         * Require a meaningful multi-word match.
+         *
+         * A score of 100 means every meaningful keyword word matched.
+         * A lower score is allowed when the database keyword contains
+         * additional optional wording, but at least two meaningful words
+         * must already have matched for a multi-word keyword above.
          */
-        return if (bestScore >= 50) {
+        return if (bestQuestion != null && bestScore >= 50) {
             bestQuestion
         } else {
             null
@@ -1615,6 +1661,39 @@ object OfflineKnowledgeBase {
     }
 
     private fun meaningfulWordScore(
+        query: String,
+        keyword: String
+    ): Int {
+
+        val queryWords =
+            meaningfulWords(query)
+
+        val keywordWords =
+            meaningfulWords(keyword)
+
+        if (
+            queryWords.isEmpty() ||
+            keywordWords.isEmpty()
+        ) {
+            return 0
+        }
+
+        val matchedWords =
+            matchedMeaningfulWordCount(
+                query,
+                keyword
+            )
+
+        if (matchedWords == 0) {
+            return 0
+        }
+
+        return (
+                matchedWords * 100
+                ) / keywordWords.size
+    }
+
+    private fun matchedMeaningfulWordCount(
         query: String,
         keyword: String
     ): Int {
@@ -1641,13 +1720,7 @@ object OfflineKnowledgeBase {
             }
         }
 
-        if (matchedWords == 0) {
-            return 0
-        }
-
-        return (
-                matchedWords * 100
-                ) / keywordWords.size
+        return matchedWords
     }
 
     private fun meaningfulWords(
