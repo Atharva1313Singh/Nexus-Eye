@@ -1,0 +1,587 @@
+{
+  "version": "1.0",
+  "title": "NEXUS EYE Offline Knowledge Package",
+  "language": "en",
+  "entries": [
+    {
+      "question": "what is your name",
+      "answer": "My name is NEXUS EYE."
+    },
+    {
+      "question": "who are you",
+      "answer": "I am NEXUS EYE, a voice-first assistive system."
+    },
+    {
+      "question": "what can you do",
+      "answer": "I can help with local questions, voice interaction, vision, navigation, weather queries, and connected wearable functions."
+    },
+    {
+      "question": "how are you",
+      "answer": "I am ready to help."
+    },
+    {
+      "question": "what is artificial intelligence",
+      "answer": "Artificial intelligence is technology that enables computers to perform tasks that normally require human intelligence."
+    },
+    {
+      "question": "what is machine learning",
+      "answer": "Machine learning is a method where computers learn patterns from data to make predictions or decisions."
+    },
+    {
+      "question": "what is the internet",
+      "answer": "The internet is a global network that connects computers and devices."
+    },
+    {
+      "question": "what is a computer",
+      "answer": "A computer is an electronic device that processes data and performs programmed tasks."
+    },
+    {
+      "question": "what is a smartphone",
+      "answer": "A smartphone is a mobile computer with communication, sensors, apps, and a touchscreen."
+    },
+    {
+      "question": "what is android",
+      "answer": "Android is a mobile operating system used by many smartphones and devices."
+    },
+    {
+      "question": "what is bluetooth",
+      "answer": "Bluetooth is a short-range wireless communication technology."
+    },
+    {
+      "question": "what is wifi",
+      "answer": "Wi-Fi is a wireless networking technology used to connect devices to a network."
+    },
+    {
+      "question": "what is gps",
+      "answer": "GPS is a satellite-based system used to determine location."
+    },
+    {
+      "question": "what is gps used for",
+      "answer": "GPS is commonly used for location, navigation, and tracking."
+    },
+    {
+      "question": "what is a satellite",
+      "answer": "A satellite is an object placed in orbit around a larger body such as Earth."
+    },
+    {
+      "question": "what is a sensor",
+      "answer": "A sensor detects a physical condition such as distance, light, motion, temperature, or sound."
+    },
+    {
+      "question": "what is a camera",
+      "answer": "A camera captures images or video."
+    },
+    {
+      "question": "what is a microphone",
+      "answer": "A microphone converts sound into an electrical signal that a device can process."
+    },
+    {
+      "question": "what is a speaker",
+      "answer": "A speaker converts an electrical audio signal into sound."
+    },
+    {
+      "question": "what is text to speech",
+      "answer": "Text to speech converts written text into spoken audio."
+    },
+    {
+      "question": "what is speech recognition",
+      "answer": "Speech recognition converts spoken language into text or commands."
+    },
+    {
+      "question": "what is offline",
+      "answer": "Offline means a feature can operate without an internet connection."
+    },
+    {
+      "question": "what is online",
+      "answer": "Online means a feature can use network-connected services or data."
+    },
+    {
+      "question": "what is an app",
+      "answer": "An app is software designed to perform tasks on a device."
+    },
+    {
+      "question": "what is an operating system",
+      "answer": "An operating system manages a device's hardware and provides services for applications."
+    },
+    {
+      "question": "what is a file",
+      "answer": "A file is a named collection of digital data stored by a device."
+    },
+    {
+      "question": "what is a folder",
+      "answer": "A folder is a container used to organize files."
+    },
+    {
+      "question": "what is a password",
+      "answer": "A password is a secret string used to protect access to an account or system."
+    },
+    {
+      "question": "what is encryption",
+      "answer": "Encryption transforms data into a form that is difficult to read without the proper key."
+    },
+    {
+      "question": "what is privacy",
+      "answer": "Privacy is the ability to control how personal information is collected, used, and shared."
+    },
+    {
+      "question": "what is a database",
+      "answer": "A database is an organized collection of data that can be stored and retrieved."
+    },
+    {
+      "question": "what is json",
+      "answer": "JSON is a text format commonly used to represent structured data."
+    },
+    {
+      "question": "what is kotlin",
+      "answer": "Kotlin is a programming language commonly used for Android development."
+    },
+    {
+      "question": "what is java",
+      "answer": "Java is a programming language used for many kinds of software."
+    },
+    {
+      "question": "what is a programming language",
+      "answer": "A programming language is a formal language used to write instructions for computers."
+    },
+    {
+      "question": "what is source code",
+      "answer": "Source code is the human-readable instructions used to build software."
+    },
+    {
+      "question": "what is an algorithm",
+      "answer": "An algorithm is a step-by-step method for solving a problem."
+    },
+    {
+      "question": "what is a bug in software",
+      "answer": "A software bug is an error that causes a program to behave incorrectly."
+    },
+    {
+      "question": "what is debugging",
+      "answer": "Debugging is the process of finding and fixing software problems."
+    },
+    {
+      "question": "what is a compiler",
+      "answer": "A compiler translates source code into a form that can be executed or otherwise processed."
+    },
+    {
+      "question": "what is an api",
+      "answer": "An API is an interface that lets software components communicate with each other."
+    },
+    {
+      "question": "what is cloud computing",
+      "answer": "Cloud computing provides computing resources or services over a network, often the internet."
+    },
+    {
+      "question": "what is cybersecurity",
+      "answer": "Cybersecurity focuses on protecting systems, networks, and data from unauthorized access or attack."
+    },
+    {
+      "question": "what is a backup",
+      "answer": "A backup is an extra copy of data kept so it can be restored after loss or damage."
+    },
+    {
+      "question": "what is a notification",
+      "answer": "A notification is a message from an app or system that informs the user about an event."
+    },
+    {
+      "question": "what is a battery",
+      "answer": "A battery stores electrical energy and supplies power to a device."
+    },
+    {
+      "question": "what is voltage",
+      "answer": "Voltage is electrical potential difference measured in volts."
+    },
+    {
+      "question": "what is current",
+      "answer": "Electric current is the flow of electric charge."
+    },
+    {
+      "question": "what is resistance",
+      "answer": "Electrical resistance describes how strongly a material opposes current."
+    },
+    {
+      "question": "what is a resistor",
+      "answer": "A resistor is an electronic component that limits or controls current."
+    },
+    {
+      "question": "what is an led",
+      "answer": "An LED is a light-emitting diode that produces light when current flows through it."
+    },
+    {
+      "question": "what is a diode",
+      "answer": "A diode is an electronic component that mainly allows current to flow in one direction."
+    },
+    {
+      "question": "what is a transistor",
+      "answer": "A transistor is an electronic component used for switching or amplification."
+    },
+    {
+      "question": "what is a microcontroller",
+      "answer": "A microcontroller is a small computer on a chip used to control electronic systems."
+    },
+    {
+      "question": "what is esp32",
+      "answer": "ESP32 is a family of microcontrollers with wireless connectivity and general-purpose processing capabilities."
+    },
+    {
+      "question": "what is esp32-s3",
+      "answer": "ESP32-S3 is a member of the ESP32 family designed for embedded applications and includes Wi-Fi, Bluetooth LE, and AI-oriented features."
+    },
+    {
+      "question": "what is ble",
+      "answer": "BLE stands for Bluetooth Low Energy, a wireless technology designed for low-power communication."
+    },
+    {
+      "question": "what is i2c",
+      "answer": "I2C is a two-wire serial communication protocol commonly used between integrated circuits."
+    },
+    {
+      "question": "what is spi",
+      "answer": "SPI is a serial communication protocol commonly used for short-distance communication between electronic components."
+    },
+    {
+      "question": "what is uart",
+      "answer": "UART is a serial communication method that sends data asynchronously over communication lines."
+    },
+    {
+      "question": "what is i2s",
+      "answer": "I2S is a digital audio interface commonly used to transfer audio data between chips."
+    },
+    {
+      "question": "what is ov7670",
+      "answer": "OV7670 is a small digital camera sensor module used in embedded projects."
+    },
+    {
+      "question": "what is an ultrasonic sensor",
+      "answer": "An ultrasonic sensor uses sound waves above the human hearing range to measure distance."
+    },
+    {
+      "question": "what is dfplayer mini",
+      "answer": "DFPlayer Mini is a small audio playback module that can play stored audio files."
+    },
+    {
+      "question": "what is inmp441",
+      "answer": "INMP441 is a digital MEMS microphone module that can output audio data using I2S."
+    },
+    {
+      "question": "what is a gpio pin",
+      "answer": "A GPIO pin is a configurable digital input or output on a microcontroller."
+    },
+    {
+      "question": "what is an embedded system",
+      "answer": "An embedded system is a computer designed to perform a dedicated function within a larger device."
+    },
+    {
+      "question": "what is electronics",
+      "answer": "Electronics is the field concerned with controlling electrical signals using components and circuits."
+    },
+    {
+      "question": "what is electricity",
+      "answer": "Electricity involves the presence and movement of electric charge."
+    },
+    {
+      "question": "what is a circuit",
+      "answer": "A circuit is a connected path through which electric current can flow."
+    },
+    {
+      "question": "what is a power supply",
+      "answer": "A power supply provides electrical power at the voltage and current needed by a device."
+    },
+    {
+      "question": "what is a sensor fusion",
+      "answer": "Sensor fusion combines information from multiple sensors to improve an estimate or decision."
+    },
+    {
+      "question": "what is computer vision",
+      "answer": "Computer vision is the field of enabling computers to interpret information from images or video."
+    },
+    {
+      "question": "what is ocr",
+      "answer": "OCR stands for optical character recognition, which extracts text from images."
+    },
+    {
+      "question": "what is face detection",
+      "answer": "Face detection identifies the location of faces in an image."
+    },
+    {
+      "question": "what is face recognition",
+      "answer": "Face recognition attempts to determine whether a detected face matches a known identity."
+    },
+    {
+      "question": "what is object recognition",
+      "answer": "Object recognition identifies or classifies objects in images or video."
+    },
+    {
+      "question": "what is image metadata",
+      "answer": "Image metadata is information associated with an image, such as dimensions, date, camera details, or location when available."
+    },
+    {
+      "question": "what is a photo library",
+      "answer": "A photo library is a collection used to store and organize images."
+    },
+    {
+      "question": "what is an embedding in ai",
+      "answer": "An embedding is a numerical representation of data designed so that useful similarities can be measured."
+    },
+    {
+      "question": "what is a neural network",
+      "answer": "A neural network is a machine-learning model made of connected computational units inspired loosely by biological neurons."
+    },
+    {
+      "question": "what is tflite",
+      "answer": "TensorFlow Lite is a format and runtime approach for running certain machine-learning models on devices."
+    },
+    {
+      "question": "what is ml kit",
+      "answer": "ML Kit is a collection of mobile machine-learning capabilities from Google."
+    },
+    {
+      "question": "what is route navigation",
+      "answer": "Route navigation determines a path from a starting location to a destination and provides guidance along it."
+    },
+    {
+      "question": "what is turn by turn navigation",
+      "answer": "Turn-by-turn navigation gives stepwise directions such as when to turn and continue."
+    },
+    {
+      "question": "what is rerouting",
+      "answer": "Rerouting calculates a new route when the current route is no longer suitable."
+    },
+    {
+      "question": "what is an off route condition",
+      "answer": "An off-route condition means the user's current position has moved sufficiently away from the intended route."
+    },
+    {
+      "question": "what is brouter",
+      "answer": "BRouter is a routing engine designed to calculate routes using OpenStreetMap-based data."
+    },
+    {
+      "question": "what is openstreetmap",
+      "answer": "OpenStreetMap is a collaborative map database containing geographic information."
+    },
+    {
+      "question": "what is a map",
+      "answer": "A map is a representation of geographic locations and features."
+    },
+    {
+      "question": "what is latitude",
+      "answer": "Latitude measures position north or south of the equator in degrees."
+    },
+    {
+      "question": "what is longitude",
+      "answer": "Longitude measures position east or west of the prime meridian in degrees."
+    },
+    {
+      "question": "what is an address",
+      "answer": "An address is information used to identify a place or location."
+    },
+    {
+      "question": "what is geocoding",
+      "answer": "Geocoding converts location descriptions such as addresses into geographic coordinates."
+    },
+    {
+      "question": "what is reverse geocoding",
+      "answer": "Reverse geocoding converts geographic coordinates into a human-readable place description."
+    },
+    {
+      "question": "what is weather",
+      "answer": "Weather describes the current or expected atmospheric conditions at a place and time."
+    },
+    {
+      "question": "what is temperature",
+      "answer": "Temperature measures how hot or cold something is."
+    },
+    {
+      "question": "what is humidity",
+      "answer": "Humidity describes the amount of water vapor in the air."
+    },
+    {
+      "question": "what is rainfall",
+      "answer": "Rainfall is precipitation that falls from clouds as liquid water."
+    },
+    {
+      "question": "what is wind speed",
+      "answer": "Wind speed is the rate at which air moves."
+    },
+    {
+      "question": "what is a forecast",
+      "answer": "A forecast is an estimate of future conditions based on available data and models."
+    },
+    {
+      "question": "what is today",
+      "answer": "Today means the current calendar day."
+    },
+    {
+      "question": "what is tomorrow",
+      "answer": "Tomorrow means the calendar day after today."
+    },
+    {
+      "question": "what is yesterday",
+      "answer": "Yesterday means the calendar day before today."
+    },
+    {
+      "question": "what is time",
+      "answer": "Time is a measure used to sequence events and describe their duration."
+    },
+    {
+      "question": "what is a clock",
+      "answer": "A clock is a device or system that measures and displays time."
+    },
+    {
+      "question": "what is the sun",
+      "answer": "The Sun is the star at the center of our solar system."
+    },
+    {
+      "question": "what is the moon",
+      "answer": "The Moon is Earth's natural satellite."
+    },
+    {
+      "question": "what is earth",
+      "answer": "Earth is the planet we live on and the third planet from the Sun."
+    },
+    {
+      "question": "what is water",
+      "answer": "Water is a chemical compound made of hydrogen and oxygen, commonly written as H2O."
+    },
+    {
+      "question": "what is oxygen",
+      "answer": "Oxygen is a chemical element with atomic number 8 and is important for many biological processes."
+    },
+    {
+      "question": "what is carbon dioxide",
+      "answer": "Carbon dioxide is a gas composed of one carbon atom and two oxygen atoms."
+    },
+    {
+      "question": "what is gravity",
+      "answer": "Gravity is the attraction between masses."
+    },
+    {
+      "question": "what is light",
+      "answer": "Light is electromagnetic radiation that can be detected by the human eye over a certain range of wavelengths."
+    },
+    {
+      "question": "what is sound",
+      "answer": "Sound is a mechanical wave that travels through a medium such as air, water, or a solid."
+    },
+    {
+      "question": "what is energy",
+      "answer": "Energy is the capacity to cause change or do work."
+    },
+    {
+      "question": "what is force",
+      "answer": "Force is an interaction that can change the motion of an object."
+    },
+    {
+      "question": "what is speed",
+      "answer": "Speed is the distance traveled per unit of time."
+    },
+    {
+      "question": "what is distance",
+      "answer": "Distance is the amount of space between two points."
+    },
+    {
+      "question": "what is a kilometer",
+      "answer": "A kilometer is a unit of length equal to one thousand meters."
+    },
+    {
+      "question": "what is a meter",
+      "answer": "A meter is the SI base unit of length."
+    },
+    {
+      "question": "what is a centimeter",
+      "answer": "A centimeter is one hundredth of a meter."
+    },
+    {
+      "question": "what is a kilogram",
+      "answer": "A kilogram is the SI base unit of mass."
+    },
+    {
+      "question": "what is a second",
+      "answer": "A second is the SI base unit of time."
+    },
+    {
+      "question": "what is a minute",
+      "answer": "A minute is equal to sixty seconds."
+    },
+    {
+      "question": "what is an hour",
+      "answer": "An hour is equal to sixty minutes."
+    },
+    {
+      "question": "what is india",
+      "answer": "India is a country in South Asia."
+    },
+    {
+      "question": "what is the capital of india",
+      "answer": "The capital of India is New Delhi."
+    },
+    {
+      "question": "what is the national language of india",
+      "answer": "India does not have a single national language at the Union level; Hindi and English are used for official Union purposes, alongside many constitutionally recognized languages."
+    },
+    {
+      "question": "what is the currency of india",
+      "answer": "The currency of India is the Indian rupee."
+    },
+    {
+      "question": "what is the symbol of indian rupee",
+      "answer": "The symbol of the Indian rupee is ₹."
+    },
+    {
+      "question": "what is the taj mahal",
+      "answer": "The Taj Mahal is a historic monument in Agra, India."
+    },
+    {
+      "question": "what is new delhi",
+      "answer": "New Delhi is the capital city of India."
+    },
+    {
+      "question": "what is uttar pradesh",
+      "answer": "Uttar Pradesh is a state in northern India."
+    },
+    {
+      "question": "what is lucknow",
+      "answer": "Lucknow is the capital of Uttar Pradesh."
+    },
+    {
+      "question": "what is raebareli",
+      "answer": "Raebareli is a city and district headquarters in Uttar Pradesh, India."
+    },
+    {
+      "question": "what is the united nations",
+      "answer": "The United Nations is an international organization whose members cooperate on issues including peace, security, and development."
+    },
+    {
+      "question": "what is a school",
+      "answer": "A school is an institution where students receive education and training."
+    },
+    {
+      "question": "what is education",
+      "answer": "Education is the process of gaining knowledge, skills, and understanding."
+    },
+    {
+      "question": "what is mathematics",
+      "answer": "Mathematics is the study of numbers, quantities, structures, patterns, and relationships."
+    },
+    {
+      "question": "what is physics",
+      "answer": "Physics is the study of matter, energy, motion, and the laws that describe the physical world."
+    },
+    {
+      "question": "what is chemistry",
+      "answer": "Chemistry is the study of matter, its properties, composition, and transformations."
+    },
+    {
+      "question": "what is biology",
+      "answer": "Biology is the study of living organisms."
+    },
+    {
+      "question": "what is history",
+      "answer": "History is the study of past events and human societies."
+    },
+    {
+      "question": "what is geography",
+      "answer": "Geography studies places, environments, and the relationships between people and Earth."
+    }
+  ]
+}
