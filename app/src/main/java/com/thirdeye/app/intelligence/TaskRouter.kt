@@ -10,6 +10,11 @@ class TaskRouter(
     private val wikipediaFallback =
         WikipediaFallback()
 
+    private val geminiApiClient =
+        GeminiApiClient(
+            context
+        )
+
     suspend fun process(
         query: String,
         speechLanguageId: String
@@ -132,7 +137,8 @@ class TaskRouter(
             if (dateTime != null) {
 
                 return IntelligenceResult(
-                    answer = dateTime,
+                    answer =
+                        dateTime,
                     source =
                         ResponseSource.DEVICE
                 )
@@ -201,32 +207,9 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 3. CURRENT / LIVE INFORMATION
-         * ==================================================
-         */
-
-        if (
-            isCurrentInformationQuestion(
-                lower
-            )
-        ) {
-
-            return IntelligenceResult(
-                answer =
-                    unavailableQuestionMessage(
-                        speechLanguageId
-                    ),
-                source =
-                    ResponseSource.UNKNOWN
-            )
-        }
-
-        /*
-         * ==================================================
-         * 4. EXISTING OFFLINE KNOWLEDGE BASE
+         * 3. EXISTING OFFLINE KNOWLEDGE BASE
          *
-         * The database itself is NOT replaced.
-         * Only the Hindi response style is changed.
+         * Keep the existing local database first.
          * ==================================================
          */
 
@@ -252,7 +235,8 @@ class TaskRouter(
                 }
 
             return IntelligenceResult(
-                answer = answer,
+                answer =
+                    answer,
                 source =
                     ResponseSource.OFFLINE_DATABASE
             )
@@ -260,7 +244,7 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 5. INTERNET CHECK
+         * 4. INTERNET CHECK
          * ==================================================
          */
 
@@ -283,7 +267,50 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 6. ONLINE FALLBACK
+         * 5. GEMINI GENERAL INTELLIGENCE
+         *
+         * This is the missing path in the current app.
+         *
+         * Any question not handled by the existing fast/local
+         * handlers reaches Gemini here when internet is available.
+         * ==================================================
+         */
+
+        val geminiAnswer =
+            try {
+
+                geminiApiClient.ask(
+                    question =
+                        cleanQuery,
+
+                    speechLanguageId =
+                        speechLanguageId
+                )
+
+            } catch (_: Exception) {
+
+                null
+            }
+
+        if (
+            !geminiAnswer
+                .isNullOrBlank()
+        ) {
+
+            return IntelligenceResult(
+                answer =
+                    geminiAnswer.trim(),
+
+                source =
+                    ResponseSource.GEMINI
+            )
+        }
+
+        /*
+         * ==================================================
+         * 6. EXISTING WIKIPEDIA FALLBACK
+         *
+         * Keep the existing online fallback after Gemini.
          * ==================================================
          */
 
@@ -291,8 +318,11 @@ class TaskRouter(
             try {
 
                 wikipediaFallback.search(
-                    query = cleanQuery,
-                    languageId = speechLanguageId
+                    query =
+                        cleanQuery,
+
+                    languageId =
+                        speechLanguageId
                 )
 
             } catch (_: Exception) {
@@ -314,9 +344,6 @@ class TaskRouter(
             )
         }
 
-        /*
-         * Never expose technical failure text.
-         */
         if (
             onlineResult.source ==
             ResponseSource.UNKNOWN
@@ -408,76 +435,6 @@ class TaskRouter(
         }
 
         return null
-    }
-
-    /*
-     * ======================================================
-     * CURRENT / LIVE INFORMATION
-     * ======================================================
-     */
-
-    private fun isCurrentInformationQuestion(
-        query: String
-    ): Boolean {
-
-        val currentTerms =
-            listOf(
-                "current",
-                "currently",
-                "right now",
-                "at present",
-                "latest",
-                "today",
-                "now",
-                "this year",
-                "this month",
-                "this week",
-                "recent",
-                "recently",
-
-                "वर्तमान",
-                "अभी",
-                "इस समय",
-                "आज",
-                "नवीनतम",
-                "हाल का",
-                "हाल ही में"
-            )
-
-        if (
-            !currentTerms.any { term ->
-                query.contains(term)
-            }
-        ) {
-
-            return false
-        }
-
-        val questionPatterns =
-            listOf(
-                "who is",
-                "what is",
-                "what are",
-                "where is",
-                "who are",
-                "which is",
-                "which are",
-                "how is",
-                "how much",
-                "where are",
-
-                "कौन है",
-                "क्या है",
-                "कौन हैं",
-                "कहाँ है",
-                "कितना है",
-                "कितनी है",
-                "कहाँ हैं"
-            )
-
-        return questionPatterns.any { pattern ->
-            query.contains(pattern)
-        }
     }
 
     /*

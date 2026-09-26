@@ -1,10 +1,17 @@
 package com.thirdeye.app.intelligence
 
 enum class ResponseSource {
+
     OFFLINE_DATABASE,
+
     CALCULATOR,
+
     DEVICE,
+
     WIKIPEDIA,
+
+    GEMINI,
+
     UNKNOWN
 }
 

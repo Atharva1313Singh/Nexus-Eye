@@ -336,6 +336,9 @@ fun VoiceScreen(
                         ResponseSource.WIKIPEDIA ->
                             "Online"
 
+                        ResponseSource.GEMINI ->
+                            "Gemini AI"
+
                         ResponseSource.UNKNOWN ->
                             "Unknown"
                     }

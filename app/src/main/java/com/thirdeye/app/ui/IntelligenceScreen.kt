@@ -45,6 +45,7 @@ fun IntelligenceScreen(
     speechLanguage: NexusEyeLanguage,
     onBack: () -> Unit
 ) {
+
     var input by remember {
         mutableStateOf("")
     }
@@ -70,10 +71,16 @@ fun IntelligenceScreen(
 
     val audioRouter =
         remember(speechLanguage) {
+
             NexusEyeAssistantAudioRouter(
-                context = context,
-                bleManager = bleManager,
-                speechLanguage = speechLanguage
+                context =
+                    context,
+
+                bleManager =
+                    bleManager,
+
+                speechLanguage =
+                    speechLanguage
             )
         }
 
@@ -91,12 +98,17 @@ fun IntelligenceScreen(
     fun speakAnswer(
         answer: String
     ) {
+
         val cleanAnswer =
             answer.trim()
 
-        if (cleanAnswer.isBlank()) {
+        if (
+            cleanAnswer.isBlank()
+        ) {
+
             speechStatus =
                 "There is no answer to speak."
+
             return
         }
 
@@ -105,19 +117,32 @@ fun IntelligenceScreen(
                 audioRouter
                     .isWearableAudioAvailable
             ) {
+
                 "Sending answer to ESP32 wearable."
+
             } else {
+
                 "ESP32 not connected. Phone audio fallback active."
             }
 
         audioRouter.routeText(
-            text = cleanAnswer,
-            language = speechLanguage,
+
+            text =
+                cleanAnswer,
+
+            language =
+                speechLanguage,
+
             onSuccess = { message ->
-                speechStatus = message
+
+                speechStatus =
+                    message
             },
+
             onError = { message ->
-                speechStatus = message
+
+                speechStatus =
+                    message
             }
         )
     }
@@ -127,26 +152,37 @@ fun IntelligenceScreen(
         val question =
             input.trim()
 
-        if (question.isBlank()) {
+        if (
+            question.isBlank()
+        ) {
             return
         }
 
         scope.launch {
 
-            isProcessing = true
-            speechStatus = ""
-            result = null
+            isProcessing =
+                true
+
+            speechStatus =
+                ""
+
+            result =
+                null
 
             try {
 
                 val response =
                     taskRouter.process(
-                        query = question,
+
+                        query =
+                            question,
+
                         speechLanguageId =
                             speechLanguage.id
                     )
 
-                result = response
+                result =
+                    response
 
                 speakAnswer(
                     response.answer
@@ -162,7 +198,8 @@ fun IntelligenceScreen(
 
             } finally {
 
-                isProcessing = false
+                isProcessing =
+                    false
             }
         }
     }
@@ -170,25 +207,38 @@ fun IntelligenceScreen(
     Scaffold { innerPadding ->
 
         Column(
+
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(20.dp),
+                    .padding(
+                        innerPadding
+                    )
+                    .padding(
+                        20.dp
+                    ),
+
             verticalArrangement =
-                Arrangement.spacedBy(14.dp)
+                Arrangement.spacedBy(
+                    14.dp
+                )
         ) {
 
             Text(
+
                 text =
                     nexusText(
                         AppTextKey.INTELLIGENCE
                     ),
+
                 style =
-                    MaterialTheme.typography.headlineLarge
+                    MaterialTheme
+                        .typography
+                        .headlineLarge
             )
 
             Text(
+
                 text =
                     if (
                         connectionState ==
@@ -196,64 +246,95 @@ fun IntelligenceScreen(
                         connectionState ==
                         NexusEyeConnectionState.CONNECTED
                     ) {
+
                         "ESP32 connected"
+
                     } else {
+
                         "ESP32 not connected"
                     },
+
                 style =
-                    MaterialTheme.typography.titleMedium
+                    MaterialTheme
+                        .typography
+                        .titleMedium
             )
 
             Text(
+
                 text =
                     if (
                         audioRouter
                             .isWearableAudioAvailable
                     ) {
+
                         "Audio path: ESP32 wearable"
+
                     } else {
+
                         "Audio path: phone fallback"
                     },
+
                 style =
-                    MaterialTheme.typography.bodyMedium
+                    MaterialTheme
+                        .typography
+                        .bodyMedium
             )
 
             OutlinedTextField(
-                value = input,
+
+                value =
+                    input,
+
                 onValueChange = {
                     input = it
                 },
+
                 modifier =
                     Modifier.fillMaxWidth(),
+
                 label = {
+
                     Text(
+
                         text =
                             nexusText(
                                 AppTextKey.TYPE_QUESTION
                             )
                     )
                 },
-                minLines = 3
+
+                minLines =
+                    3
             )
 
             Button(
+
                 onClick = {
                     askQuestion()
                 },
+
                 enabled =
                     input.isNotBlank() &&
                             !isProcessing,
+
                 modifier =
                     Modifier.fillMaxWidth()
             ) {
 
                 Text(
+
                     text =
-                        if (isProcessing) {
+                        if (
+                            isProcessing
+                        ) {
+
                             nexusText(
                                 AppTextKey.PROCESSING
                             )
+
                         } else {
+
                             nexusText(
                                 AppTextKey.ASK
                             )
@@ -264,34 +345,50 @@ fun IntelligenceScreen(
             result?.let { response ->
 
                 Card(
+
                     modifier =
                         Modifier.fillMaxWidth()
                 ) {
 
                     Column(
+
                         modifier =
-                            Modifier.padding(16.dp),
+                            Modifier.padding(
+                                16.dp
+                            ),
+
                         verticalArrangement =
-                            Arrangement.spacedBy(8.dp)
+                            Arrangement.spacedBy(
+                                8.dp
+                            )
                     ) {
 
                         Text(
+
                             text =
                                 nexusText(
                                     AppTextKey.ANSWER
                                 ),
+
                             style =
-                                MaterialTheme.typography.titleMedium
+                                MaterialTheme
+                                    .typography
+                                    .titleMedium
                         )
 
                         Text(
+
                             text =
                                 response.answer,
+
                             style =
-                                MaterialTheme.typography.bodyLarge
+                                MaterialTheme
+                                    .typography
+                                    .bodyLarge
                         )
 
                         Text(
+
                             text =
                                 "${
                                     nexusText(
@@ -302,8 +399,11 @@ fun IntelligenceScreen(
                                         response.source
                                     )
                                 }",
+
                             style =
-                                MaterialTheme.typography.bodyMedium
+                                MaterialTheme
+                                    .typography
+                                    .bodyMedium
                         )
                     }
                 }
@@ -315,21 +415,31 @@ fun IntelligenceScreen(
             ) {
 
                 Card(
+
                     modifier =
                         Modifier.fillMaxWidth()
                 ) {
 
                     Text(
-                        text = speechStatus,
+
+                        text =
+                            speechStatus,
+
                         modifier =
-                            Modifier.padding(16.dp),
+                            Modifier.padding(
+                                16.dp
+                            ),
+
                         style =
-                            MaterialTheme.typography.bodyMedium
+                            MaterialTheme
+                                .typography
+                                .bodyMedium
                     )
                 }
             }
 
             OutlinedButton(
+
                 onClick = {
 
                     try {
@@ -339,11 +449,13 @@ fun IntelligenceScreen(
 
                     onBack()
                 },
+
                 modifier =
                     Modifier.fillMaxWidth()
             ) {
 
                 Text(
+
                     text =
                         nexusText(
                             AppTextKey.BACK
@@ -380,6 +492,9 @@ private fun sourceText(
             nexusText(
                 AppTextKey.ONLINE
             )
+
+        ResponseSource.GEMINI ->
+            "Gemini AI"
 
         ResponseSource.UNKNOWN ->
             nexusText(
