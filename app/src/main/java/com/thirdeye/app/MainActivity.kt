@@ -194,8 +194,8 @@ class MainActivity :
         remember {
 
             mutableStateOf(
-                apiCredentialStore
-                    .hasGeminiApiKey()
+                apiCredentialStore.hasGeminiApiKey() &&
+                        apiCredentialStore.hasOnlineNavigationApiKey()
             )
         }
 
@@ -539,23 +539,32 @@ class MainActivity :
 
                             ApiKeySetupScreen(
 
-                                onApiKeySaved = {
-                                        apiKey ->
+                                onApiKeysSaved = {
+                                        geminiApiKey,
+                                        onlineNavigationApiKey ->
 
                                     try {
 
                                         apiCredentialStore
                                             .saveGeminiApiKey(
-                                                apiKey
+                                                geminiApiKey
+                                            )
+
+                                        apiCredentialStore
+                                            .saveOnlineNavigationApiKey(
+                                                onlineNavigationApiKey
                                             )
 
                                         recordSetupStepCompleted()
 
                                         apiKeySetupComplete =
-                                            true
+                                            apiCredentialStore.hasGeminiApiKey() &&
+                                                    apiCredentialStore.hasOnlineNavigationApiKey()
 
-                                        currentScreen =
-                                            AppScreen.HOME
+                                        if (apiKeySetupComplete) {
+                                            currentScreen =
+                                                AppScreen.HOME
+                                        }
 
                                     } catch (_: Exception) {
 
@@ -661,7 +670,7 @@ class MainActivity :
                                     } else {
 
                                         requestNavigation(
-                                            "${home.latitude},${home.longitude}"
+                                            home.address
                                         )
 
                                         true
@@ -1278,128 +1287,87 @@ private fun formatEstimatedTime(
 
 @Composable
 private fun ApiKeySetupScreen(
-    onApiKeySaved: (String) -> Unit
+    onApiKeysSaved: (String, String) -> Unit
 ) {
 
-    var apiKey by
-    remember {
-
-        mutableStateOf("")
-    }
-
-    var errorMessage by
-    remember {
-
-        mutableStateOf("")
-    }
+    var geminiApiKey by remember { mutableStateOf("") }
+    var onlineNavigationApiKey by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf("") }
 
     Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-
-        verticalArrangement =
-            Arrangement.spacedBy(
-                16.dp
-            )
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-
         Text(
-            text =
-                "NEXUS EYE setup",
-
-            style =
-                MaterialTheme
-                    .typography
-                    .headlineLarge
+            text = "NEXUS EYE setup",
+            style = MaterialTheme.typography.headlineLarge
         )
 
         Text(
-            text =
-                "Enter your Gemini API key to finish the initial setup. The key will be stored using protected Android Keystore-backed storage."
+            text = "Enter the Gemini API key and the OpenRouteService navigation API key. Both are stored using protected Android Keystore-backed storage."
         )
 
         OutlinedTextField(
-            value =
-                apiKey,
-
+            value = geminiApiKey,
             onValueChange = {
-                    value ->
-
-                apiKey =
-                    value
-
-                errorMessage =
-                    ""
+                geminiApiKey = it
+                errorMessage = ""
             },
-
-            label = {
-                Text(
-                    "Gemini API key"
-                )
-            },
-
+            label = { Text("Gemini API key") },
             singleLine = true,
-
-            visualTransformation =
-                PasswordVisualTransformation(),
-
-            modifier =
-                Modifier.fillMaxWidth()
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth()
         )
 
-        if (
-            errorMessage.isNotBlank()
-        ) {
+        OutlinedTextField(
+            value = onlineNavigationApiKey,
+            onValueChange = {
+                onlineNavigationApiKey = it
+                errorMessage = ""
+            },
+            label = { Text("OpenRouteService navigation API key") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth()
+        )
 
+        Text(
+            text = "BRouter remains the offline-first router. The OpenRouteService key is used only for online route fallback."
+        )
+
+        if (errorMessage.isNotBlank()) {
             Text(
-                text =
-                    errorMessage,
-
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .error
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error
             )
         }
 
         Button(
             onClick = {
+                val cleanGeminiKey = geminiApiKey.trim()
+                val cleanNavigationKey = onlineNavigationApiKey.trim()
 
-                val cleanKey =
-                    apiKey.trim()
-
-                if (
-                    cleanKey.isBlank()
-                ) {
-
-                    errorMessage =
-                        "Please enter your Gemini API key."
-
-                } else {
-
-                    try {
-
-                        onApiKeySaved(
-                            cleanKey
-                        )
-
-                    } catch (_: Exception) {
-
-                        errorMessage =
-                            "The API key could not be saved. Please try again."
+                when {
+                    cleanGeminiKey.isBlank() -> {
+                        errorMessage = "Please enter your Gemini API key."
+                    }
+                    cleanNavigationKey.isBlank() -> {
+                        errorMessage = "Please enter your OpenRouteService navigation API key."
+                    }
+                    else -> {
+                        try {
+                            onApiKeysSaved(cleanGeminiKey, cleanNavigationKey)
+                        } catch (_: Exception) {
+                            errorMessage = "The API keys could not be saved. Please try again."
+                        }
                     }
                 }
             },
-
-            modifier =
-                Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth()
         ) {
-
-            Text(
-                "SAVE API KEY AND CONTINUE"
-            )
+            Text("SAVE API KEYS AND CONTINUE")
         }
     }
 }

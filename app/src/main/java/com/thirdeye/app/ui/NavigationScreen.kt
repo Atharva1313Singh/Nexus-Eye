@@ -1,12 +1,7 @@
 package com.thirdeye.app.ui
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationManager
-import android.os.Handler
-import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -23,14 +20,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,19 +34,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import com.thirdeye.app.navigation.NexusEyeBRouterPoint
 import com.thirdeye.app.navigation.NexusEyeBRouterRoute
 import com.thirdeye.app.navigation.NexusEyeNavigationManager
-import com.thirdeye.app.environment.NexusEyeHomeLocation
-import com.thirdeye.app.environment.NexusEyeHomeLocationManager
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
@@ -90,63 +75,6 @@ fun NavigationScreen(
     var currentRoute by remember {
         mutableStateOf<NexusEyeBRouterRoute?>(null)
     }
-
-    var detectingLocation by remember {
-        mutableStateOf(false)
-    }
-
-    var manualHomeLatitude by remember {
-        mutableStateOf("")
-    }
-
-    var manualHomeLongitude by remember {
-        mutableStateOf("")
-    }
-
-    var homeStatus by remember {
-        mutableStateOf("")
-    }
-
-    val homeLocationManager = remember {
-        NexusEyeHomeLocationManager(context)
-    }
-
-    val scope = rememberCoroutineScope()
-
-    val locationClient = remember {
-        LocationServices.getFusedLocationProviderClient(context)
-    }
-
-    val locationPermissionLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestMultiplePermissions()
-        ) { permissions ->
-            val granted =
-                permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                        permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-
-            if (granted) {
-                detectCurrentLocation(
-                    context = context,
-                    locationClient = locationClient,
-                    onLocation = { location ->
-                        currentLocation = location
-                        statusText =
-                            "Location detected. Accuracy: ${location.accuracy.toInt()} m"
-                    },
-                    onStatus = { message ->
-                        statusText = message
-                    },
-                    onFinished = {
-                        detectingLocation = false
-                    }
-                )
-            } else {
-                detectingLocation = false
-                statusText =
-                    "Location permission was denied. Enable Precise Location for NEXUS EYE in Android settings."
-            }
-        }
 
     val resolvedDestination by
     navigationManager
@@ -219,6 +147,9 @@ fun NavigationScreen(
                         end = 12.dp,
                         top = 8.dp,
                         bottom = 8.dp
+                    )
+                    .verticalScroll(
+                        rememberScrollState()
                     ),
 
             verticalArrangement =
@@ -241,8 +172,8 @@ fun NavigationScreen(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .weight(
-                            1f
+                        .height(
+                            360.dp
                         ),
                 shape =
                     RoundedCornerShape(
@@ -311,188 +242,6 @@ fun NavigationScreen(
                                 MaterialTheme
                                     .typography
                                     .labelLarge
-                        )
-                    }
-                }
-            }
-
-            OutlinedButton(
-                onClick = {
-                    if (detectingLocation) return@OutlinedButton
-
-                    if (hasLocationPermission(context)) {
-                        detectingLocation = true
-
-                        detectCurrentLocation(
-                            context = context,
-                            locationClient = locationClient,
-                            onLocation = { location ->
-                                currentLocation = location
-                                statusText =
-                                    "Location detected. Accuracy: ${location.accuracy.toInt()} m"
-                            },
-                            onStatus = { message ->
-                                statusText = message
-                            },
-                            onFinished = {
-                                detectingLocation = false
-                            }
-                        )
-                    } else {
-                        detectingLocation = true
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !detectingLocation
-            ) {
-                Text(
-                    text =
-                        if (detectingLocation) {
-                            "Detecting location..."
-                        } else {
-                            "Detect My Location"
-                        }
-                )
-            }
-
-            if (currentLocation != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "Current exact location",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text =
-                                "Latitude: ${currentLocation!!.latitude}\nLongitude: ${currentLocation!!.longitude}\nAccuracy: ${currentLocation!!.accuracy} m"
-                        )
-
-                        Button(
-                            onClick = {
-                                val location = currentLocation ?: return@Button
-                                scope.launch {
-                                    homeStatus = "Saving detected coordinates as Home..."
-                                    val address =
-                                        homeLocationManager.resolveAddress(
-                                            latitude = location.latitude,
-                                            longitude = location.longitude
-                                        )
-                                    homeLocationManager.saveHomeLocation(
-                                        NexusEyeHomeLocation(
-                                            latitude = location.latitude,
-                                            longitude = location.longitude,
-                                            address = address,
-                                            accuracyMeters = location.accuracy
-                                        )
-                                    )
-                                    homeStatus =
-                                        "Home saved using exact coordinates. Accuracy: ${location.accuracy.toInt()} m"
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(text = "SAVE DETECTED LOCATION AS HOME")
-                        }
-                    }
-                }
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Set Home Manually",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    Text(
-                        text =
-                            "Enter your house's exact latitude and longitude. Navigation will use these coordinates directly."
-                    )
-
-                    OutlinedTextField(
-                        value = manualHomeLatitude,
-                        onValueChange = { manualHomeLatitude = it },
-                        label = { Text(text = "Home latitude") },
-                        placeholder = { Text(text = "26.238500") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = manualHomeLongitude,
-                        onValueChange = { manualHomeLongitude = it },
-                        label = { Text(text = "Home longitude") },
-                        placeholder = { Text(text = "81.250100") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Button(
-                        onClick = {
-                            val latitude = manualHomeLatitude.trim().toDoubleOrNull()
-                            val longitude = manualHomeLongitude.trim().toDoubleOrNull()
-
-                            if (latitude == null || longitude == null) {
-                                homeStatus = "Enter valid numeric latitude and longitude."
-                            } else if (latitude !in -90.0..90.0) {
-                                homeStatus = "Latitude must be between -90 and 90."
-                            } else if (longitude !in -180.0..180.0) {
-                                homeStatus = "Longitude must be between -180 and 180."
-                            } else {
-                                scope.launch {
-                                    homeStatus = "Saving exact Home coordinates..."
-                                    val address =
-                                        homeLocationManager.resolveAddress(
-                                            latitude = latitude,
-                                            longitude = longitude
-                                        )
-                                    homeLocationManager.saveHomeLocation(
-                                        NexusEyeHomeLocation(
-                                            latitude = latitude,
-                                            longitude = longitude,
-                                            address = address
-                                        )
-                                    )
-                                    homeStatus =
-                                        "Exact Home coordinates saved."
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(text = "SAVE MANUAL HOME LOCATION")
-                    }
-
-                    homeLocationManager.getSavedHomeLocation()?.let { home ->
-                        Text(
-                            text =
-                                "Saved Home coordinates:\nLatitude: ${home.latitude}\nLongitude: ${home.longitude}" +
-                                        (home.accuracyMeters?.let { "\nDetected accuracy: ${it.toInt()} m" }
-                                            ?: "\nSource: manual coordinates"),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    if (homeStatus.isNotBlank()) {
-                        Text(
-                            text = homeStatus,
-                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -696,151 +445,6 @@ fun NavigationScreen(
                 )
             }
         }
-    }
-}
-
-private fun hasLocationPermission(context: Context): Boolean {
-    return ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.ACCESS_FINE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-}
-
-private fun detectCurrentLocation(
-    context: Context,
-    locationClient: FusedLocationProviderClient,
-    onLocation: (Location) -> Unit,
-    onStatus: (String) -> Unit,
-    onFinished: () -> Unit
-) {
-    if (!hasLocationPermission(context)) {
-        onStatus("Location permission is not granted.")
-        onFinished()
-        return
-    }
-
-    val locationManager =
-        context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-
-    val locationEnabled =
-        locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true ||
-                locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
-
-    if (!locationEnabled) {
-        onStatus("Phone Location is OFF. Turn on Location and try again.")
-        onFinished()
-        return
-    }
-
-    onStatus("Detecting your current location...")
-
-    val cancellationSource =
-        com.google.android.gms.tasks.CancellationTokenSource()
-
-    locationClient
-        .getCurrentLocation(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            cancellationSource.token
-        )
-        .addOnSuccessListener { location ->
-            if (location != null) {
-                onLocation(location)
-                onFinished()
-            } else {
-                requestLocationUpdatesFallback(
-                    locationClient = locationClient,
-                    onLocation = onLocation,
-                    onStatus = onStatus,
-                    onFinished = onFinished
-                )
-            }
-        }
-        .addOnFailureListener { exception ->
-            requestLocationUpdatesFallback(
-                locationClient = locationClient,
-                onLocation = onLocation,
-                onStatus = { fallbackMessage ->
-                    if (fallbackMessage.isNotBlank()) {
-                        onStatus(fallbackMessage)
-                    } else {
-                        onStatus(
-                            exception.message
-                                ?: "Unable to detect your location."
-                        )
-                    }
-                },
-                onFinished = onFinished
-            )
-        }
-}
-
-private fun requestLocationUpdatesFallback(
-    locationClient: FusedLocationProviderClient,
-    onLocation: (Location) -> Unit,
-    onStatus: (String) -> Unit,
-    onFinished: () -> Unit
-) {
-    onStatus("Waiting for a fresh GPS location...")
-
-    val request =
-        LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            1000L
-        )
-            .setMinUpdateIntervalMillis(500L)
-            .setMaxUpdateDelayMillis(2000L)
-            .setWaitForAccurateLocation(true)
-            .build()
-
-    var delivered = false
-
-    val callback = object : LocationCallback() {
-        override fun onLocationResult(result: LocationResult) {
-            if (delivered) return
-
-            val location =
-                result.lastLocation
-                    ?: return
-
-            delivered = true
-            locationClient.removeLocationUpdates(this)
-            onLocation(location)
-            onFinished()
-        }
-    }
-
-    try {
-        locationClient.requestLocationUpdates(
-            request,
-            callback,
-            Looper.getMainLooper()
-        )
-
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (!delivered) {
-                delivered = true
-                locationClient.removeLocationUpdates(callback)
-                onStatus(
-                    "Unable to detect your location. Make sure Location and Precise Location are ON, then try again."
-                )
-                onFinished()
-            }
-        }, 15000L)
-    } catch (securityException: SecurityException) {
-        onStatus(
-            "Location permission is not available. Enable Precise Location for NEXUS EYE."
-        )
-        onFinished()
-    } catch (exception: Exception) {
-        onStatus(
-            exception.message
-                ?: "Unable to detect your location."
-        )
-        onFinished()
     }
 }
 
