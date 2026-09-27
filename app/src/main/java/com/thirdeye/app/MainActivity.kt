@@ -199,15 +199,6 @@ class MainActivity :
             )
         }
 
-        var mapApiKeySetupComplete by
-        remember {
-
-            mutableStateOf(
-                apiCredentialStore
-                    .hasOnlineNavigationApiKey()
-            )
-        }
-
         var pendingNavigationDestination by
         remember {
 
@@ -249,8 +240,7 @@ class MainActivity :
         val setupGateComplete =
             setupComplete &&
                     notificationAccessComplete &&
-                    apiKeySetupComplete &&
-                    mapApiKeySetupComplete
+                    apiKeySetupComplete
 
         /*
          * Keep the setup timer alive while the setup gate is active.
@@ -280,14 +270,12 @@ class MainActivity :
          */
         LaunchedEffect(
             setupComplete,
-            apiKeySetupComplete,
-            mapApiKeySetupComplete
+            apiKeySetupComplete
         ) {
 
             if (
                 setupComplete &&
-                apiKeySetupComplete &&
-                mapApiKeySetupComplete
+                apiKeySetupComplete
             ) {
 
                 notificationAccessComplete =
@@ -436,22 +424,21 @@ class MainActivity :
             listOf(
                 setupComplete,
                 notificationAccessComplete,
-                apiKeySetupComplete,
-                mapApiKeySetupComplete
+                apiKeySetupComplete
             )
                 .count {
                     it
                 }
 
         val setupProgress =
-            completedSteps / 4f
+            completedSteps / 3f
 
         val estimatedRemainingMillis =
             calculateEstimatedRemainingMillis(
                 completedSetupDurations =
                     completedSetupDurations,
                 remainingSteps =
-                    4 - completedSteps
+                    3 - completedSteps
             )
 
         Surface(
@@ -477,7 +464,7 @@ class MainActivity :
                             completedSteps,
 
                         totalSteps =
-                            4,
+                            3,
 
                         estimatedRemainingMillis =
                             estimatedRemainingMillis,
@@ -490,9 +477,6 @@ class MainActivity :
 
                         apiKeySetupComplete =
                             apiKeySetupComplete,
-
-                        mapApiKeySetupComplete =
-                            mapApiKeySetupComplete,
 
                         onContinueSetup = {
 
@@ -577,39 +561,6 @@ class MainActivity :
 
                                         /*
                                          * The API-key screen remains
-                                         * active when secure storage fails.
-                                         */
-                                    }
-                                }
-                            )
-                        }
-
-                        !mapApiKeySetupComplete -> {
-
-                            OnlineNavigationApiKeySetupScreen(
-
-                                onApiKeySaved = {
-                                        apiKey ->
-
-                                    try {
-
-                                        apiCredentialStore
-                                            .saveOnlineNavigationApiKey(
-                                                apiKey
-                                            )
-
-                                        recordSetupStepCompleted()
-
-                                        mapApiKeySetupComplete =
-                                            true
-
-                                        currentScreen =
-                                            AppScreen.HOME
-
-                                    } catch (_: Exception) {
-
-                                        /*
-                                         * The map/navigation API-key screen remains
                                          * active when secure storage fails.
                                          */
                                     }
@@ -710,7 +661,7 @@ class MainActivity :
                                     } else {
 
                                         requestNavigation(
-                                            home.address
+                                            "${home.latitude},${home.longitude}"
                                         )
 
                                         true
@@ -857,10 +808,6 @@ class MainActivity :
                                     apiKeySetupComplete =
                                         apiCredentialStore
                                             .hasGeminiApiKey()
-
-                                    mapApiKeySetupComplete =
-                                        apiCredentialStore
-                                            .hasOnlineNavigationApiKey()
 
                                     completedSetupDurations =
                                         emptyList()
@@ -1055,7 +1002,6 @@ private fun InitializationSetupGateScreen(
     setupComplete: Boolean,
     notificationAccessComplete: Boolean,
     apiKeySetupComplete: Boolean,
-    mapApiKeySetupComplete: Boolean,
     onContinueSetup: () -> Unit
 ) {
 
@@ -1173,23 +1119,10 @@ private fun InitializationSetupGateScreen(
 
         SetupStepStatus(
             title =
-                "Google / Gemini API configuration",
+                "Gemini API configuration",
 
             complete =
                 apiKeySetupComplete
-        )
-
-        Spacer(
-            modifier =
-                Modifier.height(8.dp)
-        )
-
-        SetupStepStatus(
-            title =
-                "Map / online navigation API configuration",
-
-            complete =
-                mapApiKeySetupComplete
         )
 
         Spacer(
@@ -1238,9 +1171,6 @@ private fun InitializationSetupGateScreen(
 
                     !apiKeySetupComplete ->
                         "Enter and securely save your Gemini API key."
-
-                    !mapApiKeySetupComplete ->
-                        "Enter and securely save your map / online navigation API key."
 
                     else ->
                         "Setup complete."
@@ -1469,130 +1399,6 @@ private fun ApiKeySetupScreen(
 
             Text(
                 "SAVE API KEY AND CONTINUE"
-            )
-        }
-    }
-}
-
-@Composable
-private fun OnlineNavigationApiKeySetupScreen(
-    onApiKeySaved: (String) -> Unit
-) {
-
-    var apiKey by
-    remember {
-        mutableStateOf("")
-    }
-
-    var errorMessage by
-    remember {
-        mutableStateOf("")
-    }
-
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-
-        verticalArrangement =
-            Arrangement.spacedBy(16.dp)
-    ) {
-
-        Text(
-            text =
-                "NEXUS EYE map setup",
-
-            style =
-                MaterialTheme
-                    .typography
-                    .headlineLarge
-        )
-
-        Text(
-            text =
-                "Enter your OpenRouteService API key to enable online map routing when offline BRouter routing cannot calculate a route. The key will be stored using protected Android Keystore-backed storage."
-        )
-
-        OutlinedTextField(
-            value =
-                apiKey,
-
-            onValueChange = {
-                    value ->
-
-                apiKey =
-                    value
-
-                errorMessage =
-                    ""
-            },
-
-            label = {
-                Text(
-                    "OpenRouteService API key"
-                )
-            },
-
-            singleLine = true,
-
-            visualTransformation =
-                PasswordVisualTransformation(),
-
-            modifier =
-                Modifier.fillMaxWidth()
-        )
-
-        if (
-            errorMessage.isNotBlank()
-        ) {
-
-            Text(
-                text =
-                    errorMessage,
-
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .error
-            )
-        }
-
-        Button(
-            onClick = {
-
-                val cleanKey =
-                    apiKey.trim()
-
-                if (
-                    cleanKey.isBlank()
-                ) {
-
-                    errorMessage =
-                        "Please enter your OpenRouteService API key."
-
-                } else {
-
-                    try {
-
-                        onApiKeySaved(
-                            cleanKey
-                        )
-
-                    } catch (_: Exception) {
-
-                        errorMessage =
-                            "The map API key could not be saved. Please try again."
-                    }
-                }
-            },
-
-            modifier =
-                Modifier.fillMaxWidth()
-        ) {
-
-            Text(
-                "SAVE MAP API KEY AND FINISH SETUP"
             )
         }
     }

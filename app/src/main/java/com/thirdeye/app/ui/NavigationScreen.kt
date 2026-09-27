@@ -30,6 +30,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,7 +49,10 @@ import com.google.android.gms.location.Priority
 import com.thirdeye.app.navigation.NexusEyeBRouterPoint
 import com.thirdeye.app.navigation.NexusEyeBRouterRoute
 import com.thirdeye.app.navigation.NexusEyeNavigationManager
+import com.thirdeye.app.environment.NexusEyeHomeLocation
+import com.thirdeye.app.environment.NexusEyeHomeLocationManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
@@ -90,6 +94,24 @@ fun NavigationScreen(
     var detectingLocation by remember {
         mutableStateOf(false)
     }
+
+    var manualHomeLatitude by remember {
+        mutableStateOf("")
+    }
+
+    var manualHomeLongitude by remember {
+        mutableStateOf("")
+    }
+
+    var homeStatus by remember {
+        mutableStateOf("")
+    }
+
+    val homeLocationManager = remember {
+        NexusEyeHomeLocationManager(context)
+    }
+
+    val scope = rememberCoroutineScope()
 
     val locationClient = remember {
         LocationServices.getFusedLocationProviderClient(context)
@@ -337,6 +359,143 @@ fun NavigationScreen(
                             "Detect My Location"
                         }
                 )
+            }
+
+            if (currentLocation != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Current exact location",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text =
+                                "Latitude: ${currentLocation!!.latitude}\nLongitude: ${currentLocation!!.longitude}\nAccuracy: ${currentLocation!!.accuracy} m"
+                        )
+
+                        Button(
+                            onClick = {
+                                val location = currentLocation ?: return@Button
+                                scope.launch {
+                                    homeStatus = "Saving detected coordinates as Home..."
+                                    val address =
+                                        homeLocationManager.resolveAddress(
+                                            latitude = location.latitude,
+                                            longitude = location.longitude
+                                        )
+                                    homeLocationManager.saveHomeLocation(
+                                        NexusEyeHomeLocation(
+                                            latitude = location.latitude,
+                                            longitude = location.longitude,
+                                            address = address,
+                                            accuracyMeters = location.accuracy
+                                        )
+                                    )
+                                    homeStatus =
+                                        "Home saved using exact coordinates. Accuracy: ${location.accuracy.toInt()} m"
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(text = "SAVE DETECTED LOCATION AS HOME")
+                        }
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Set Home Manually",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Text(
+                        text =
+                            "Enter your house's exact latitude and longitude. Navigation will use these coordinates directly."
+                    )
+
+                    OutlinedTextField(
+                        value = manualHomeLatitude,
+                        onValueChange = { manualHomeLatitude = it },
+                        label = { Text(text = "Home latitude") },
+                        placeholder = { Text(text = "26.238500") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = manualHomeLongitude,
+                        onValueChange = { manualHomeLongitude = it },
+                        label = { Text(text = "Home longitude") },
+                        placeholder = { Text(text = "81.250100") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Button(
+                        onClick = {
+                            val latitude = manualHomeLatitude.trim().toDoubleOrNull()
+                            val longitude = manualHomeLongitude.trim().toDoubleOrNull()
+
+                            if (latitude == null || longitude == null) {
+                                homeStatus = "Enter valid numeric latitude and longitude."
+                            } else if (latitude !in -90.0..90.0) {
+                                homeStatus = "Latitude must be between -90 and 90."
+                            } else if (longitude !in -180.0..180.0) {
+                                homeStatus = "Longitude must be between -180 and 180."
+                            } else {
+                                scope.launch {
+                                    homeStatus = "Saving exact Home coordinates..."
+                                    val address =
+                                        homeLocationManager.resolveAddress(
+                                            latitude = latitude,
+                                            longitude = longitude
+                                        )
+                                    homeLocationManager.saveHomeLocation(
+                                        NexusEyeHomeLocation(
+                                            latitude = latitude,
+                                            longitude = longitude,
+                                            address = address
+                                        )
+                                    )
+                                    homeStatus =
+                                        "Exact Home coordinates saved."
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = "SAVE MANUAL HOME LOCATION")
+                    }
+
+                    homeLocationManager.getSavedHomeLocation()?.let { home ->
+                        Text(
+                            text =
+                                "Saved Home coordinates:\nLatitude: ${home.latitude}\nLongitude: ${home.longitude}" +
+                                        (home.accuracyMeters?.let { "\nDetected accuracy: ${it.toInt()} m" }
+                                            ?: "\nSource: manual coordinates"),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    if (homeStatus.isNotBlank()) {
+                        Text(
+                            text = homeStatus,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             }
 
             OutlinedTextField(

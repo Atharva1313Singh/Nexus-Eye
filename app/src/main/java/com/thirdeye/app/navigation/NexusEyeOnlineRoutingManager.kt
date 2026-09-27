@@ -17,7 +17,7 @@ class NexusEyeOnlineRoutingManager(
 
     companion object {
         private const val DIRECTIONS_URL =
-            "https://api.heigit.org/openrouteservice/v2/directions/foot-walking"
+            "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson"
 
         private const val REQUEST_TIMEOUT_MS =
             20_000L

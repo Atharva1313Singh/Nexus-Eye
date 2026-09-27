@@ -65,6 +65,8 @@ import com.thirdeye.app.vision.NexusEyeVisionSettingsManager
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.math.roundToInt
 
 @Composable
@@ -258,6 +260,18 @@ fun SettingsScreen(
         mutableStateOf<NexusEyeHomeLocation?>(null)
     }
 
+    var showManualHomeDialog by remember {
+        mutableStateOf(false)
+    }
+
+    var manualHomeLatitude by remember {
+        mutableStateOf("")
+    }
+
+    var manualHomeLongitude by remember {
+        mutableStateOf("")
+    }
+
     var homeLocationRequestPending by remember {
         mutableStateOf(false)
     }
@@ -344,7 +358,8 @@ fun SettingsScreen(
                 NexusEyeHomeLocation(
                     latitude = location.latitude,
                     longitude = location.longitude,
-                    address = address
+                    address = address,
+                    accuracyMeters = location.accuracy
                 )
 
             showHomeConfirmationDialog = true
@@ -422,6 +437,66 @@ fun SettingsScreen(
             text =
                 "Home location saved successfully."
         )
+    }
+
+    fun saveManualHome() {
+
+        val latitude =
+            manualHomeLatitude.trim().toDoubleOrNull()
+
+        val longitude =
+            manualHomeLongitude.trim().toDoubleOrNull()
+
+        if (latitude == null || longitude == null) {
+            statusMessage =
+                "Enter a valid latitude and longitude."
+            return
+        }
+
+        if (latitude !in -90.0..90.0) {
+            statusMessage =
+                "Latitude must be between -90 and 90."
+            return
+        }
+
+        if (longitude !in -180.0..180.0) {
+            statusMessage =
+                "Longitude must be between -180 and 180."
+            return
+        }
+
+        scope.launch {
+            statusMessage =
+                "Saving exact Home coordinates..."
+
+            val address =
+                homeLocationManager.resolveAddress(
+                    latitude = latitude,
+                    longitude = longitude
+                )
+
+            val home =
+                NexusEyeHomeLocation(
+                    latitude = latitude,
+                    longitude = longitude,
+                    address = address,
+                    accuracyMeters = null
+                )
+
+            homeLocationManager.saveHomeLocation(home)
+            savedHome = home
+            showManualHomeDialog = false
+
+            statusMessage =
+                "Exact Home coordinates saved."
+
+            speakConfirmation(
+                ttsManager = ttsManager,
+                language = selectedSpeechLanguage,
+                text =
+                    "Your exact Home latitude and longitude were saved."
+            )
+        }
     }
 
     fun clearHome() {
@@ -821,11 +896,11 @@ fun SettingsScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(24.dp)
                     .verticalScroll(
                         rememberScrollState()
-                    )
-                    .padding(innerPadding)
-                    .padding(24.dp),
+                    ),
             verticalArrangement =
                 Arrangement.spacedBy(16.dp)
         ) {
@@ -1771,6 +1846,16 @@ fun SettingsScreen(
                         }
                 )
 
+                Text(
+                    text =
+                        "Latitude: ${savedHome!!.latitude}\nLongitude: ${savedHome!!.longitude}" +
+                                (savedHome!!.accuracyMeters?.let {
+                                    "\nDetected accuracy: ${it.toInt()} m"
+                                } ?: "\nLocation was entered manually."),
+                    style =
+                        MaterialTheme.typography.bodySmall
+                )
+
                 Button(
                     onClick = {
                         requestChangeHome()
@@ -1786,6 +1871,26 @@ fun SettingsScreen(
                     Text(
                         text =
                             "CHANGE HOME LOCATION"
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        manualHomeLatitude = savedHome!!.latitude.toString()
+                        manualHomeLongitude = savedHome!!.longitude.toString()
+                        showManualHomeDialog = true
+                    },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .semantics {
+                                contentDescription =
+                                    "Edit Home latitude and longitude manually"
+                            }
+                ) {
+                    Text(
+                        text =
+                            "EDIT HOME LATITUDE / LONGITUDE"
                     )
                 }
 
@@ -1836,6 +1941,26 @@ fun SettingsScreen(
                     Text(
                         text =
                             "SET HOME LOCATION"
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        manualHomeLatitude = ""
+                        manualHomeLongitude = ""
+                        showManualHomeDialog = true
+                    },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .semantics {
+                                contentDescription =
+                                    "Enter Home latitude and longitude manually"
+                            }
+                ) {
+                    Text(
+                        text =
+                            "ENTER HOME COORDINATES MANUALLY"
                     )
                 }
             }
@@ -2000,6 +2125,79 @@ fun SettingsScreen(
                 }
             )
         }
+    }
+
+    if (showManualHomeDialog) {
+
+        AlertDialog(
+            onDismissRequest = {
+                showManualHomeDialog = false
+            },
+            title = {
+                Text(
+                    text = "Enter Exact Home Coordinates"
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement =
+                        Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text =
+                            "Enter the exact latitude and longitude of your house. These coordinates will be used directly for Home navigation; the address is only a label."
+                    )
+
+                    OutlinedTextField(
+                        value = manualHomeLatitude,
+                        onValueChange = {
+                            manualHomeLatitude = it
+                        },
+                        label = {
+                            Text(text = "Latitude")
+                        },
+                        placeholder = {
+                            Text(text = "Example: 26.238500")
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = manualHomeLongitude,
+                        onValueChange = {
+                            manualHomeLongitude = it
+                        },
+                        label = {
+                            Text(text = "Longitude")
+                        },
+                        placeholder = {
+                            Text(text = "Example: 81.250100")
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        saveManualHome()
+                    }
+                ) {
+                    Text(text = "SAVE EXACT HOME")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showManualHomeDialog = false
+                    }
+                ) {
+                    Text(text = "CANCEL")
+                }
+            }
+        )
     }
 
     if (showClearHomeDialog) {
@@ -2420,38 +2618,7 @@ private suspend fun obtainCurrentLocation(
         return null
     }
 
-    val lastKnownLocation =
-        suspendCoroutine<Location?> { continuation ->
-
-            try {
-                locationClient
-                    .lastLocation
-                    .addOnSuccessListener { location ->
-                        continuation.resume(
-                            location
-                        )
-                    }
-                    .addOnFailureListener {
-                        continuation.resume(
-                            null
-                        )
-                    }
-            } catch (_: SecurityException) {
-                continuation.resume(
-                    null
-                )
-            } catch (_: Exception) {
-                continuation.resume(
-                    null
-                )
-            }
-        }
-
-    if (lastKnownLocation != null) {
-        return lastKnownLocation
-    }
-
-    return suspendCoroutine { continuation ->
+    return suspendCancellableCoroutine { continuation ->
 
         val cancellationTokenSource =
             CancellationTokenSource()
@@ -2459,27 +2626,34 @@ private suspend fun obtainCurrentLocation(
         try {
             locationClient
                 .getCurrentLocation(
-                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                    Priority.PRIORITY_HIGH_ACCURACY,
                     cancellationTokenSource.token
                 )
                 .addOnSuccessListener { location ->
-                    continuation.resume(
-                        location
-                    )
+                    if (continuation.isActive) {
+                        continuation.resume(location)
+                    }
                 }
                 .addOnFailureListener {
-                    continuation.resume(
-                        null
-                    )
+                    if (continuation.isActive) {
+                        continuation.resume(null)
+                    }
                 }
+
+            continuation.invokeOnCancellation {
+                try {
+                    cancellationTokenSource.cancel()
+                } catch (_: Exception) {
+                }
+            }
         } catch (_: SecurityException) {
-            continuation.resume(
-                null
-            )
+            if (continuation.isActive) {
+                continuation.resume(null)
+            }
         } catch (_: Exception) {
-            continuation.resume(
-                null
-            )
+            if (continuation.isActive) {
+                continuation.resume(null)
+            }
         }
     }
 }
