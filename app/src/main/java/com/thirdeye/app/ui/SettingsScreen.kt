@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -216,14 +218,6 @@ fun SettingsScreen(
         mutableStateOf(initialApiCredentialState.geminiApiKeyConfigured)
     }
 
-    var onlineNavigationApiKeyInput by remember {
-        mutableStateOf("")
-    }
-
-    var onlineNavigationApiKeyConfigured by remember {
-        mutableStateOf(initialApiCredentialState.onlineNavigationApiKeyConfigured)
-    }
-
     var offlinePackagedEntryCount by remember {
         mutableStateOf(initialOfflineDataStats.packagedEntryCount)
     }
@@ -241,10 +235,6 @@ fun SettingsScreen(
     }
 
     var showClearApiKeyDialog by remember {
-        mutableStateOf(false)
-    }
-
-    var showClearOnlineNavigationApiKeyDialog by remember {
         mutableStateOf(false)
     }
 
@@ -680,67 +670,6 @@ fun SettingsScreen(
         )
     }
 
-    fun saveOnlineNavigationApiSettings() {
-
-        val cleanKey = onlineNavigationApiKeyInput.trim()
-
-        if (cleanKey.isBlank()) {
-            onlineNavigationApiKeyConfigured =
-                apiCredentialStore.hasOnlineNavigationApiKey()
-
-            statusMessage =
-                if (onlineNavigationApiKeyConfigured) {
-                    "Protected online navigation API key is already configured."
-                } else {
-                    "No online navigation API key was entered."
-                }
-
-            speakConfirmation(
-                ttsManager = ttsManager,
-                language = selectedSpeechLanguage,
-                text =
-                    if (onlineNavigationApiKeyConfigured) {
-                        "The protected online navigation API key is already configured."
-                    } else {
-                        "No online navigation API key was entered."
-                    }
-            )
-            return
-        }
-
-        apiCredentialStore.saveOnlineNavigationApiKey(cleanKey)
-        onlineNavigationApiKeyInput = ""
-        onlineNavigationApiKeyConfigured = true
-
-        statusMessage =
-            "Online navigation API key saved securely."
-
-        speakConfirmation(
-            ttsManager = ttsManager,
-            language = selectedSpeechLanguage,
-            text =
-                "The online navigation API key was saved securely in protected device storage."
-        )
-    }
-
-    fun clearOnlineNavigationApiKey() {
-
-        apiCredentialStore.clearOnlineNavigationApiKey()
-        onlineNavigationApiKeyInput = ""
-        onlineNavigationApiKeyConfigured = false
-        showClearOnlineNavigationApiKeyDialog = false
-
-        statusMessage =
-            "Protected online navigation API key removed."
-
-        speakConfirmation(
-            ttsManager = ttsManager,
-            language = selectedSpeechLanguage,
-            text =
-                "The protected online navigation API key has been removed from this device."
-        )
-    }
-
     fun resetUserSettings() {
 
         maintenanceManager.resetUserSettings()
@@ -892,6 +821,9 @@ fun SettingsScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .verticalScroll(
+                        rememberScrollState()
+                    )
                     .padding(innerPadding)
                     .padding(24.dp),
             verticalArrangement =
@@ -1549,116 +1481,7 @@ fun SettingsScreen(
             )
 
             Text(
-                text = "Online Navigation Fallback",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics {
-                    contentDescription = "Online navigation fallback settings"
-                }
-            )
-
-            Text(
-                text =
-                    "NEXUS EYE tries the local BRouter route first. If local routing fails, it can use OpenRouteService walking directions as the online fallback. The API key is stored in Android Keystore-backed protected storage.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Text(
-                text =
-                    if (onlineNavigationApiKeyConfigured) {
-                        "Online navigation API key: Configured"
-                    } else {
-                        "Online navigation API key: Not configured"
-                    },
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.semantics {
-                    contentDescription =
-                        if (onlineNavigationApiKeyConfigured) {
-                            "Online navigation API key is configured"
-                        } else {
-                            "Online navigation API key is not configured"
-                        }
-                }
-            )
-
-            OutlinedTextField(
-                value = onlineNavigationApiKeyInput,
-                onValueChange = { onlineNavigationApiKeyInput = it },
-                label = { Text("OpenRouteService API key") },
-                placeholder = { Text("Enter a new online routing API key") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics {
-                        contentDescription =
-                            "OpenRouteService API key entry. The key is hidden while typing."
-                    }
-            )
-
-            Text(
-                text =
-                    "Leave the field empty to keep the currently stored key. Entering a new key replaces the protected online navigation credential.",
-                style = MaterialTheme.typography.bodySmall
-            )
-
-            Button(
-                onClick = { saveOnlineNavigationApiSettings() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics {
-                        contentDescription =
-                            "Save online navigation API key securely"
-                    }
-            ) {
-                Text("SAVE ONLINE NAVIGATION KEY")
-            }
-
-            OutlinedButton(
-                onClick = {
-                    onlineNavigationApiKeyConfigured =
-                        apiCredentialStore.hasOnlineNavigationApiKey()
-                    statusMessage =
-                        if (onlineNavigationApiKeyConfigured) {
-                            "Protected online navigation API key is present on this device."
-                        } else {
-                            "No protected online navigation API key is stored."
-                        }
-                    speakConfirmation(
-                        ttsManager = ttsManager,
-                        language = selectedSpeechLanguage,
-                        text =
-                            if (onlineNavigationApiKeyConfigured) {
-                                "A protected online navigation API key is stored on this device."
-                            } else {
-                                "No protected online navigation API key is stored on this device."
-                            }
-                    )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics {
-                        contentDescription =
-                            "Check online navigation API key status"
-                    }
-            ) {
-                Text("CHECK ONLINE NAVIGATION KEY STATUS")
-            }
-
-            OutlinedButton(
-                onClick = { showClearOnlineNavigationApiKeyDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics {
-                        contentDescription =
-                            "Remove the protected online navigation API key"
-                    }
-            ) {
-                Text("REMOVE ONLINE NAVIGATION KEY")
-            }
-
-            Text(
                 text = "Offline Data Management",
-
                 style =
                     MaterialTheme.typography.titleMedium,
                 modifier =
@@ -2288,47 +2111,6 @@ fun SettingsScreen(
                                 AppTextKey.CANCEL
                             )
                     )
-                }
-            }
-        )
-    }
-
-    if (showClearOnlineNavigationApiKeyDialog) {
-
-        AlertDialog(
-            onDismissRequest = {
-                showClearOnlineNavigationApiKeyDialog = false
-            },
-            title = {
-                Text("Remove online navigation API key?")
-            },
-            text = {
-                Text(
-                    "This removes the stored online navigation API key from protected device storage. Local BRouter navigation remains available."
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { clearOnlineNavigationApiKey() },
-                    modifier = Modifier.semantics {
-                        contentDescription =
-                            "Confirm removal of online navigation API key"
-                    }
-                ) {
-                    Text("REMOVE")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = {
-                        showClearOnlineNavigationApiKeyDialog = false
-                    },
-                    modifier = Modifier.semantics {
-                        contentDescription =
-                            "Cancel removal of online navigation API key"
-                    }
-                ) {
-                    Text("CANCEL")
                 }
             }
         )
