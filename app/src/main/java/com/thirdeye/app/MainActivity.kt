@@ -80,6 +80,10 @@ class MainActivity :
                 this
             )
 
+        NexusEyeRuntime.registerBleManager(
+            bleManager
+        )
+
         taskRouter =
             TaskRouter(
                 this
@@ -743,6 +747,10 @@ class MainActivity :
 
         } catch (_: Exception) {
         }
+
+        NexusEyeRuntime.unregisterBleManager(
+            bleManager
+        )
 
         try {
 

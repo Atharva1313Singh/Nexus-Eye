@@ -17,9 +17,12 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import com.thirdeye.app.NexusEyeRuntime
 import com.thirdeye.app.R
+import com.thirdeye.app.audio.NexusEyeAssistantAudioRouter
 import com.thirdeye.app.audio.NexusEyeTtsManager
 import com.thirdeye.app.intelligence.TaskRouter
+import com.thirdeye.app.language.LanguageManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,6 +52,7 @@ class NexusEyeWakeWordService : Service() {
 
     private lateinit var taskRouter: TaskRouter
     private lateinit var ttsManager: NexusEyeTtsManager
+    private lateinit var languageManager: LanguageManager
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var listeningForWakeWord = false
@@ -91,6 +95,11 @@ class NexusEyeWakeWordService : Service() {
 
         ttsManager =
             NexusEyeTtsManager(
+                applicationContext
+            )
+
+        languageManager =
+            LanguageManager(
                 applicationContext
             )
 
@@ -265,7 +274,7 @@ class NexusEyeWakeWordService : Service() {
                                 text
                             )
 
-                        if (command != null) {
+                        if (command != null && command.isNotBlank()) {
                             cancelRecognizer()
                             processCommand(
                                 command
@@ -335,9 +344,17 @@ class NexusEyeWakeWordService : Service() {
             )
 
         if (command != null) {
-            processCommand(
-                command
-            )
+            if (command.isBlank()) {
+                // Support the natural two-step flow:
+                // "Hey Nexus" -> wait for the command.
+                startCommandListening()
+            } else {
+                // Also support the one-step flow:
+                // "Hey Nexus, navigate home".
+                processCommand(
+                    command
+                )
+            }
             return
         }
 
@@ -405,48 +422,71 @@ class NexusEyeWakeWordService : Service() {
 
         serviceScope.launch {
             try {
-                val speechLanguageId =
-                    if (
-                        Locale.getDefault()
-                            .language
-                            .equals(
-                                "hi",
-                                ignoreCase = true
-                            )
-                    ) {
-                        "hi"
-                    } else {
-                        "en"
-                    }
+                val speechLanguage =
+                    languageManager
+                        .getCurrentState()
+                        .speechLanguage
 
                 val result =
                     taskRouter.process(
                         query = cleanCommand,
-                        speechLanguageId = speechLanguageId
+                        speechLanguageId = speechLanguage.id
                     )
 
-                try {
-                    ttsManager.speakOnPhoneFallback(
-                        text = result.answer,
-                        onComplete = {
+                val bleManager =
+                    NexusEyeRuntime.getBleManager()
+
+                if (bleManager == null) {
+                    // MainActivity has not registered an active BLE manager,
+                    // so use the existing phone fallback.
+                    try {
+                        if (!ttsManager.setLanguage(speechLanguage)) {
                             commandProcessing = false
-                            scheduleWakeRestart(
-                                delayMillis = 250L
-                            )
-                        },
-                        onError = {
-                            commandProcessing = false
-                            scheduleWakeRestart(
-                                delayMillis = 250L
-                            )
+                            scheduleWakeRestart(250L)
+                            return@launch
                         }
-                    )
-                } catch (_: Exception) {
-                    commandProcessing = false
-                    scheduleWakeRestart(
-                        delayMillis = 250L
-                    )
+
+                        ttsManager.speakOnPhoneFallback(
+                            text = result.answer,
+                            language = speechLanguage,
+                            onComplete = {
+                                commandProcessing = false
+                                scheduleWakeRestart(250L)
+                            },
+                            onError = {
+                                commandProcessing = false
+                                scheduleWakeRestart(250L)
+                            }
+                        )
+                    } catch (_: Exception) {
+                        commandProcessing = false
+                        scheduleWakeRestart(250L)
+                    }
+                    return@launch
                 }
+
+                val audioRouter =
+                    NexusEyeAssistantAudioRouter(
+                        context = applicationContext,
+                        bleManager = bleManager,
+                        speechLanguage = speechLanguage,
+                        providedTtsManager = ttsManager
+                    )
+
+                audioRouter.routeText(
+                    text = result.answer,
+                    language = speechLanguage,
+                    onSuccess = {
+                        audioRouter.shutdown()
+                        commandProcessing = false
+                        scheduleWakeRestart(250L)
+                    },
+                    onError = {
+                        audioRouter.shutdown()
+                        commandProcessing = false
+                        scheduleWakeRestart(250L)
+                    }
+                )
             } catch (_: Exception) {
                 commandProcessing = false
                 scheduleWakeRestart(
