@@ -24,6 +24,7 @@ fun HomeScreen(
     onIntelligenceClick: () -> Unit,
     onVisionClick: () -> Unit,
     onNavigationClick: () -> Unit,
+    onWeatherClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
     Scaffold { innerPadding ->
@@ -147,6 +148,20 @@ fun HomeScreen(
                 Text(
                     text =
                         "Navigation"
+                )
+            }
+
+            Button(
+                onClick =
+                    onWeatherClick,
+
+                modifier =
+                    Modifier.fillMaxWidth()
+            ) {
+
+                Text(
+                    text =
+                        "Weather"
                 )
             }
 

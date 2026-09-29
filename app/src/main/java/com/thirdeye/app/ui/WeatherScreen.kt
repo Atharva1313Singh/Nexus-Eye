@@ -29,6 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.thirdeye.app.audio.NexusEyeAssistantAudioRouter
+import com.thirdeye.app.audio.NexusEyeTtsManager
+import com.thirdeye.app.bluetooth.NexusEyeBleManager
 import com.thirdeye.app.environment.NexusEyeWeather
 import com.thirdeye.app.environment.NexusEyeWeatherManager
 import com.thirdeye.app.language.NexusEyeLanguage
@@ -38,8 +41,9 @@ import java.util.Locale
 @Composable
 fun WeatherScreen(
     context: Context,
+    bleManager: NexusEyeBleManager,
+    ttsManager: NexusEyeTtsManager,
     speechLanguage: NexusEyeLanguage,
-    onSpeak: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
 
@@ -50,6 +54,16 @@ fun WeatherScreen(
         remember {
             NexusEyeWeatherManager(
                 appContext
+            )
+        }
+
+    val audioRouter =
+        remember(bleManager, speechLanguage) {
+            NexusEyeAssistantAudioRouter(
+                context = appContext,
+                bleManager = bleManager,
+                speechLanguage = speechLanguage,
+                providedTtsManager = ttsManager
             )
         }
 
@@ -183,10 +197,9 @@ fun WeatherScreen(
 
         if (result != null) {
 
-            onSpeak(
-                result.speechText(
-                    speechLanguage.id
-                )
+            audioRouter.routeText(
+                text = result.speechText(speechLanguage.id),
+                language = speechLanguage
             )
         }
     }

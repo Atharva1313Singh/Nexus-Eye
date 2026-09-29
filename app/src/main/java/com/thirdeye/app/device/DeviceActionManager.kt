@@ -3,6 +3,7 @@ package com.thirdeye.app.device
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.ContactsContract
@@ -26,13 +27,19 @@ class DeviceActionManager(
 
     private data class ParsedCommand(
         val type: CommandType,
-        val contactQuery: String,
-        val message: String
+        val contactQuery: String = "",
+        val message: String = "",
+        val value: String = ""
     )
 
     private enum class CommandType {
         CALL,
-        MESSAGE
+        MESSAGE,
+        OPEN_APP,
+        WEB_SEARCH,
+        OPEN_SETTINGS,
+        OPEN_CAMERA,
+        OPEN_MAPS
     }
 
     /*
@@ -51,6 +58,42 @@ class DeviceActionManager(
                     handled = false,
                     answer = ""
                 )
+
+        when (parsed.type) {
+
+            CommandType.OPEN_APP ->
+                return openApplication(parsed.value)
+
+            CommandType.WEB_SEARCH ->
+                return webSearch(parsed.value)
+
+            CommandType.OPEN_SETTINGS ->
+                return openSystemIntent(
+                    Intent(
+                        android.provider.Settings.ACTION_SETTINGS
+                    ),
+                    "Opening phone settings."
+                )
+
+            CommandType.OPEN_CAMERA ->
+                return openSystemIntent(
+                    Intent(
+                        "android.media.action.IMAGE_CAPTURE"
+                    ),
+                    "Opening the camera."
+                )
+
+            CommandType.OPEN_MAPS ->
+                return openSystemIntent(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("geo:0,0?q=" + Uri.encode(parsed.value))
+                    ),
+                    "Opening Maps for ${parsed.value}."
+                )
+
+            else -> Unit
+        }
 
         /*
          * Contacts permission is required for both calls and
@@ -128,6 +171,12 @@ class DeviceActionManager(
                     phoneNumber = contact.second,
                     message = parsed.message
                 )
+
+            else ->
+                Result(
+                    handled = false,
+                    answer = ""
+                )
         }
     }
 
@@ -146,6 +195,108 @@ class DeviceActionManager(
 
         if (normalized.isBlank()) {
             return null
+        }
+
+        /*
+         * --------------------------------------------------------
+         * APP / PHONE CONTROL COMMANDS
+         * --------------------------------------------------------
+         */
+
+        val settingsCommands =
+            listOf(
+                "open settings",
+                "open phone settings",
+                "phone settings",
+                "सेटिंग खोलो",
+                "सेटिंग्स खोलो"
+            )
+
+        if (settingsCommands.any { normalized == it }) {
+            return ParsedCommand(
+                type = CommandType.OPEN_SETTINGS
+            )
+        }
+
+        val cameraCommands =
+            listOf(
+                "open camera",
+                "launch camera",
+                "camera kholo",
+                "कैमरा खोलो"
+            )
+
+        if (cameraCommands.any { normalized == it }) {
+            return ParsedCommand(
+                type = CommandType.OPEN_CAMERA
+            )
+        }
+
+        val mapsPrefixes =
+            listOf(
+                "open maps for ",
+                "open map for ",
+                "show maps for ",
+                "maps for ",
+                "मैप खोलो "
+            )
+
+        for (prefix in mapsPrefixes) {
+            if (normalized.startsWith(prefix)) {
+                val destination = normalized.removePrefix(prefix).trim()
+                if (destination.isNotBlank()) {
+                    return ParsedCommand(
+                        type = CommandType.OPEN_MAPS,
+                        value = destination
+                    )
+                }
+            }
+        }
+
+        val searchPrefixes =
+            listOf(
+                "search for ",
+                "search ",
+                "google ",
+                "look up ",
+                "find online ",
+                "सर्च करो ",
+                "खोजो "
+            )
+
+        for (prefix in searchPrefixes) {
+            if (normalized.startsWith(prefix)) {
+                val search = normalized.removePrefix(prefix).trim()
+                if (search.isNotBlank()) {
+                    return ParsedCommand(
+                        type = CommandType.WEB_SEARCH,
+                        value = search
+                    )
+                }
+            }
+        }
+
+        val openAppPrefixes =
+            listOf(
+                "open ",
+                "launch ",
+                "start ",
+                "open app ",
+                "launch app ",
+                "ऐप खोलो ",
+                "खोलो "
+            )
+
+        for (prefix in openAppPrefixes) {
+            if (normalized.startsWith(prefix)) {
+                val appName = normalized.removePrefix(prefix).trim()
+                if (appName.isNotBlank()) {
+                    return ParsedCommand(
+                        type = CommandType.OPEN_APP,
+                        value = appName
+                    )
+                }
+            }
         }
 
         /*
@@ -791,6 +942,163 @@ class DeviceActionManager(
                 handled = true,
                 answer =
                     "I could not open WhatsApp for $contactName."
+            )
+        }
+    }
+
+    /*
+     * ============================================================
+     * APP / WEB / SYSTEM CONTROL
+     * ============================================================
+     */
+
+    private fun openApplication(
+        requestedName: String
+    ): Result {
+
+        val normalizedName =
+            normalize(requestedName)
+
+        val knownPackages =
+            mapOf(
+                "whatsapp" to "com.whatsapp",
+                "youtube" to "com.google.android.youtube",
+                "chrome" to "com.android.chrome",
+                "google chrome" to "com.android.chrome",
+                "gmail" to "com.google.android.gm",
+                "google maps" to "com.google.android.apps.maps",
+                "maps" to "com.google.android.apps.maps",
+                "instagram" to "com.instagram.android",
+                "facebook" to "com.facebook.katana",
+                "telegram" to "org.telegram.messenger",
+                "spotify" to "com.spotify.music",
+                "phone" to "com.google.android.dialer",
+                "dialer" to "com.google.android.dialer",
+                "camera" to "com.android.camera"
+            )
+
+        val packageName =
+            knownPackages[normalizedName]
+
+        if (packageName != null) {
+            val packageIntent =
+                appContext.packageManager
+                    .getLaunchIntentForPackage(packageName)
+
+            if (packageIntent != null) {
+                packageIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                return try {
+                    appContext.startActivity(packageIntent)
+                    Result(
+                        handled = true,
+                        answer = "Opening $requestedName."
+                    )
+                } catch (_: ActivityNotFoundException) {
+                    Result(
+                        handled = true,
+                        answer = "I could not open $requestedName because it is not available on this phone."
+                    )
+                }
+            }
+        }
+
+        val launcherIntent =
+            Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+
+        val matches =
+            appContext.packageManager
+                .queryIntentActivities(launcherIntent, 0)
+
+        val match =
+            matches.firstOrNull { info ->
+                val label =
+                    info.loadLabel(appContext.packageManager)
+                        ?.toString()
+                        ?.let(::normalize)
+                        ?: return@firstOrNull false
+
+                label == normalizedName ||
+                        label.contains(normalizedName) ||
+                        normalizedName.contains(label)
+            }
+
+        if (match != null) {
+            val launchIntent =
+                appContext.packageManager
+                    .getLaunchIntentForPackage(
+                        match.activityInfo.packageName
+                    )
+
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                return try {
+                    appContext.startActivity(launchIntent)
+                    Result(
+                        handled = true,
+                        answer = "Opening $requestedName."
+                    )
+                } catch (_: Exception) {
+                    Result(
+                        handled = true,
+                        answer = "I could not open $requestedName."
+                    )
+                }
+            }
+        }
+
+        return Result(
+            handled = true,
+            answer = "I could not find an installed app named $requestedName."
+        )
+    }
+
+    private fun webSearch(
+        query: String
+    ): Result {
+
+        val cleanQuery = query.trim()
+
+        if (cleanQuery.isBlank()) {
+            return Result(
+                handled = true,
+                answer = "Please tell me what you want me to search for."
+            )
+        }
+
+        val url =
+            "https://www.google.com/search?q=" +
+                    Uri.encode(cleanQuery)
+
+        return openSystemIntent(
+            Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(url)
+            ),
+            "Searching for $cleanQuery."
+        )
+    }
+
+    private fun openSystemIntent(
+        intent: Intent,
+        successMessage: String
+    ): Result {
+
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        return try {
+            appContext.startActivity(intent)
+            Result(
+                handled = true,
+                answer = successMessage
+            )
+        } catch (_: Exception) {
+            Result(
+                handled = true,
+                answer = "I could not open that on this phone."
             )
         }
     }

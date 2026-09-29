@@ -41,6 +41,7 @@ import com.thirdeye.app.ui.SettingsScreen
 import com.thirdeye.app.ui.SetupRoleScreen
 import com.thirdeye.app.ui.VisionScreen
 import com.thirdeye.app.ui.VoiceScreen
+import com.thirdeye.app.ui.WeatherScreen
 import kotlinx.coroutines.launch
 
 class MainActivity :
@@ -417,6 +418,13 @@ class MainActivity :
                                             .NAVIGATION
                                 },
 
+                                onWeatherClick = {
+
+                                    currentScreen =
+                                        AppScreen
+                                            .WEATHER
+                                },
+
                                 onSettingsClick = {
 
                                     currentScreen =
@@ -552,6 +560,31 @@ class MainActivity :
 
                                 bleManager =
                                     bleManager,
+
+                                speechLanguage =
+                                    languageState
+                                        .speechLanguage,
+
+                                onBack = {
+
+                                    currentScreen =
+                                        AppScreen.HOME
+                                }
+                            )
+                        }
+
+                        AppScreen.WEATHER -> {
+
+                            WeatherScreen(
+
+                                context =
+                                    this@MainActivity,
+
+                                bleManager =
+                                    bleManager,
+
+                                ttsManager =
+                                    ttsManager,
 
                                 speechLanguage =
                                     languageState
@@ -789,6 +822,8 @@ private enum class AppScreen {
     VOICE,
 
     INTELLIGENCE,
+
+    WEATHER,
 
     SETTINGS
 }

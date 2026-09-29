@@ -2,6 +2,7 @@ package com.thirdeye.app.intelligence
 
 import android.content.Context
 import com.thirdeye.app.device.DeviceActionManager
+import com.thirdeye.app.environment.NexusEyeWeatherManager
 import java.util.Locale
 
 class TaskRouter(
@@ -13,6 +14,11 @@ class TaskRouter(
 
     private val deviceActionManager =
         DeviceActionManager(
+            context
+        )
+
+    private val weatherManager =
+        NexusEyeWeatherManager(
             context
         )
 
@@ -236,7 +242,62 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 4. CURRENT / LIVE INFORMATION
+         * 4. WEATHER
+         * ==================================================
+         */
+
+        if (isWeatherQuestion(lower)) {
+
+            return try {
+
+                val weather =
+                    weatherManager.getCurrentWeather()
+
+                IntelligenceResult(
+                    answer =
+                        weather.speechText(
+                            speechLanguageId
+                        ),
+                    source =
+                        ResponseSource.WEATHER
+                )
+
+            } catch (_: SecurityException) {
+
+                IntelligenceResult(
+                    answer =
+                        if (speechLanguageId == "hi") {
+                            "मौसम बताने के लिए मुझे आपकी लोकेशन की अनुमति चाहिए।"
+                        } else {
+                            "I need location permission to tell you the current weather."
+                        },
+                    source =
+                        ResponseSource.WEATHER,
+                    requiredPermissions =
+                        listOf(
+                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                )
+
+            } catch (_: Exception) {
+
+                IntelligenceResult(
+                    answer =
+                        if (speechLanguageId == "hi") {
+                            "माफ़ कीजिए, मैं अभी मौसम की जानकारी प्राप्त नहीं कर सका।"
+                        } else {
+                            "Sorry, I could not get the weather information right now."
+                        },
+                    source =
+                        ResponseSource.WEATHER
+                )
+            }
+        }
+
+        /*
+         * ==================================================
+         * 5. CURRENT / LIVE INFORMATION
          * ==================================================
          */
 
@@ -258,7 +319,7 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 5. EXISTING OFFLINE KNOWLEDGE BASE
+         * 6. EXISTING OFFLINE KNOWLEDGE BASE
          * ==================================================
          */
 
@@ -293,7 +354,7 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 6. INTERNET CHECK
+         * 7. INTERNET CHECK
          * ==================================================
          */
 
@@ -316,7 +377,7 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 7. GEMINI ONLINE FALLBACK
+         * 8. GEMINI ONLINE FALLBACK
          * ==================================================
          */
 
@@ -349,7 +410,7 @@ class TaskRouter(
 
         /*
          * ==================================================
-         * 8. WIKIPEDIA FALLBACK
+         * 9. WIKIPEDIA FALLBACK
          * ==================================================
          */
 
@@ -474,6 +535,37 @@ class TaskRouter(
         }
 
         return null
+    }
+
+    /*
+     * ======================================================
+     * WEATHER MATCHING
+     * ======================================================
+     */
+
+    private fun isWeatherQuestion(
+        query: String
+    ): Boolean {
+
+        val weatherTerms =
+            listOf(
+                "weather",
+                "temperature",
+                "forecast",
+                "rain today",
+                "will it rain",
+                "how hot is it",
+                "how cold is it",
+                "मौसम",
+                "तापमान",
+                "बारिश",
+                "वर्षा",
+                "आज बारिश होगी"
+            )
+
+        return weatherTerms.any {
+            query.contains(it)
+        }
     }
 
     /*

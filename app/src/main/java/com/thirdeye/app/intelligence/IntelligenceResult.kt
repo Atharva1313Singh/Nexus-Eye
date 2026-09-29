@@ -5,6 +5,7 @@ enum class ResponseSource {
     CALCULATOR,
     DEVICE,
     DEVICE_ACTION,
+    WEATHER,
     GEMINI,
     WIKIPEDIA,
     UNKNOWN

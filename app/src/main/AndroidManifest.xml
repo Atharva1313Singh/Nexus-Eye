@@ -16,6 +16,10 @@
         <intent>
             <action android:name="android.speech.RecognitionService"/>
         </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
     </queries>
     <application android:name=".NexusEyeWakeWordApplication" android:allowBackup="true" android:label="NEXUS EYE" android:supportsRtl="true" android:theme="@style/Theme.ThirdEye">
         <activity android:name=".MainActivity" android:exported="true">
@@ -30,6 +34,14 @@
             </intent-filter>
         </service>
         <service android:name=".voice.NexusEyeWakeWordService" android:label="NEXUS EYE voice activation" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="microphone"/>
+        <service android:name=".accessibility.NexusEyeAccessibilityService" android:label="NEXUS EYE Accessibility Control" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/nexus_eye_accessibility_service"/>
+        </service>
         <provider android:name="androidx.core.content.FileProvider" android:authorities="com.thirdeye.app.fileprovider" android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/>
         </provider>

@@ -379,6 +379,9 @@ private fun sourceText(
         ResponseSource.DEVICE_ACTION ->
             "Phone action"
 
+        ResponseSource.WEATHER ->
+            "Weather"
+
         ResponseSource.GEMINI ->
             "Gemini AI"
 

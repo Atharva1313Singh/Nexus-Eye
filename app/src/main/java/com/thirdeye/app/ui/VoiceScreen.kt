@@ -412,6 +412,9 @@ fun VoiceScreen(
                         ResponseSource.DEVICE_ACTION ->
                             "Device action"
 
+                        ResponseSource.WEATHER ->
+                            "Weather"
+
                         ResponseSource.GEMINI ->
                             "Gemini AI"
 
