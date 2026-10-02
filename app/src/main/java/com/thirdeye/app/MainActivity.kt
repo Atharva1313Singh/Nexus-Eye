@@ -31,8 +31,12 @@ import com.thirdeye.app.language.NexusEyeLanguage
 import com.thirdeye.app.language.NexusEyeLanguages
 import com.thirdeye.app.navigation.NexusEyeNavigationManager
 import com.thirdeye.app.navigation.NexusEyeNavigationSettings
+import com.thirdeye.app.navigation.NexusEyeHomeNavigationTarget
+import com.thirdeye.app.notifications.NexusEyeNotificationAccessManager
+import com.thirdeye.app.security.NexusEyeApiCredentialStore
 import com.thirdeye.app.setup.SetupRole
 import com.thirdeye.app.ui.CommunicationScreen
+import com.thirdeye.app.ui.GeminiApiKeySetupScreen
 import com.thirdeye.app.ui.HomeScreen
 import com.thirdeye.app.ui.IntelligenceScreen
 import com.thirdeye.app.ui.NavigationScreen
@@ -140,6 +144,20 @@ class MainActivity :
         val scope =
             rememberCoroutineScope()
 
+        val notificationAccessManager =
+            remember {
+                NexusEyeNotificationAccessManager(
+                    this@MainActivity
+                )
+            }
+
+        val apiCredentialStore =
+            remember {
+                NexusEyeApiCredentialStore(
+                    this@MainActivity
+                )
+            }
+
         var currentScreen by
         remember {
 
@@ -168,7 +186,17 @@ class MainActivity :
         remember {
 
             mutableStateOf(
-                false
+                notificationAccessManager
+                    .isAccessGranted()
+            )
+        }
+
+        var apiSetupComplete by
+        remember {
+
+            mutableStateOf(
+                apiCredentialStore
+                    .hasGeminiApiKey()
             )
         }
 
@@ -323,6 +351,24 @@ class MainActivity :
             }
         }
 
+        fun startHomeNavigation(
+            home: NexusEyeHomeNavigationTarget
+        ) {
+
+            navigationManager
+                .navigateToCoordinates(
+                    latitude =
+                        home.latitude,
+                    longitude =
+                        home.longitude,
+                    displayName =
+                        home.address,
+                    strideMeters =
+                        navigationSettings
+                            .getStrideMeters()
+                )
+        }
+
         Surface(
             modifier =
                 Modifier.fillMaxSize(),
@@ -369,6 +415,20 @@ class MainActivity :
 
                             currentScreen =
                                 AppScreen.HOME
+                        }
+                    )
+                }
+
+                !apiSetupComplete -> {
+
+                    GeminiApiKeySetupScreen(
+                        context =
+                            this@MainActivity,
+                        onBack = {
+
+                            apiSetupComplete =
+                                apiCredentialStore
+                                    .hasGeminiApiKey()
                         }
                     )
                 }
@@ -470,8 +530,15 @@ class MainActivity :
 
                                     } else {
 
-                                        requestNavigation(
-                                            home.address
+                                        startHomeNavigation(
+                                            NexusEyeHomeNavigationTarget(
+                                                latitude =
+                                                    home.latitude,
+                                                longitude =
+                                                    home.longitude,
+                                                address =
+                                                    home.address
+                                            )
                                         )
 
                                         true
@@ -539,6 +606,14 @@ class MainActivity :
                                 speechLanguage =
                                     languageState
                                         .speechLanguage,
+
+                                onNavigateHome = {
+                                        home ->
+
+                                    startHomeNavigation(
+                                        home
+                                    )
+                                },
 
                                 onBack = {
 

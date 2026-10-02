@@ -1,11 +1,14 @@
 package com.thirdeye.app.device
 
 import android.Manifest
+import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.ContactsContract
 import androidx.core.content.ContextCompat
 import java.net.URLEncoder
@@ -87,7 +90,10 @@ class DeviceActionManager(
                 return openSystemIntent(
                     Intent(
                         Intent.ACTION_VIEW,
-                        Uri.parse("geo:0,0?q=" + Uri.encode(parsed.value))
+                        Uri.parse(
+                            "geo:0,0?q=" +
+                                    Uri.encode(parsed.value)
+                        )
                     ),
                     "Opening Maps for ${parsed.value}."
                 )
@@ -199,7 +205,7 @@ class DeviceActionManager(
 
         /*
          * --------------------------------------------------------
-         * APP / PHONE CONTROL COMMANDS
+         * SYSTEM CONTROL
          * --------------------------------------------------------
          */
 
@@ -212,9 +218,15 @@ class DeviceActionManager(
                 "सेटिंग्स खोलो"
             )
 
-        if (settingsCommands.any { normalized == it }) {
+        if (
+            settingsCommands.any {
+                normalized == it
+            }
+        ) {
+
             return ParsedCommand(
-                type = CommandType.OPEN_SETTINGS
+                type =
+                    CommandType.OPEN_SETTINGS
             )
         }
 
@@ -226,11 +238,23 @@ class DeviceActionManager(
                 "कैमरा खोलो"
             )
 
-        if (cameraCommands.any { normalized == it }) {
+        if (
+            cameraCommands.any {
+                normalized == it
+            }
+        ) {
+
             return ParsedCommand(
-                type = CommandType.OPEN_CAMERA
+                type =
+                    CommandType.OPEN_CAMERA
             )
         }
+
+        /*
+         * --------------------------------------------------------
+         * MAPS
+         * --------------------------------------------------------
+         */
 
         val mapsPrefixes =
             listOf(
@@ -241,17 +265,38 @@ class DeviceActionManager(
                 "मैप खोलो "
             )
 
-        for (prefix in mapsPrefixes) {
-            if (normalized.startsWith(prefix)) {
-                val destination = normalized.removePrefix(prefix).trim()
-                if (destination.isNotBlank()) {
+        for (
+        prefix in mapsPrefixes
+        ) {
+
+            if (
+                normalized.startsWith(prefix)
+            ) {
+
+                val destination =
+                    normalized
+                        .removePrefix(prefix)
+                        .trim()
+
+                if (
+                    destination.isNotBlank()
+                ) {
+
                     return ParsedCommand(
-                        type = CommandType.OPEN_MAPS,
-                        value = destination
+                        type =
+                            CommandType.OPEN_MAPS,
+                        value =
+                            destination
                     )
                 }
             }
         }
+
+        /*
+         * --------------------------------------------------------
+         * WEB SEARCH
+         * --------------------------------------------------------
+         */
 
         val searchPrefixes =
             listOf(
@@ -264,36 +309,28 @@ class DeviceActionManager(
                 "खोजो "
             )
 
-        for (prefix in searchPrefixes) {
-            if (normalized.startsWith(prefix)) {
-                val search = normalized.removePrefix(prefix).trim()
-                if (search.isNotBlank()) {
-                    return ParsedCommand(
-                        type = CommandType.WEB_SEARCH,
-                        value = search
-                    )
-                }
-            }
-        }
+        for (
+        prefix in searchPrefixes
+        ) {
 
-        val openAppPrefixes =
-            listOf(
-                "open ",
-                "launch ",
-                "start ",
-                "open app ",
-                "launch app ",
-                "ऐप खोलो ",
-                "खोलो "
-            )
+            if (
+                normalized.startsWith(prefix)
+            ) {
 
-        for (prefix in openAppPrefixes) {
-            if (normalized.startsWith(prefix)) {
-                val appName = normalized.removePrefix(prefix).trim()
-                if (appName.isNotBlank()) {
+                val search =
+                    normalized
+                        .removePrefix(prefix)
+                        .trim()
+
+                if (
+                    search.isNotBlank()
+                ) {
+
                     return ParsedCommand(
-                        type = CommandType.OPEN_APP,
-                        value = appName
+                        type =
+                            CommandType.WEB_SEARCH,
+                        value =
+                            search
                     )
                 }
             }
@@ -301,7 +338,51 @@ class DeviceActionManager(
 
         /*
          * --------------------------------------------------------
-         * CALL COMMANDS
+         * OPEN APPLICATION
+         * --------------------------------------------------------
+         */
+
+        val openAppPrefixes =
+            listOf(
+                "open app ",
+                "launch app ",
+                "open ",
+                "launch ",
+                "start ",
+                "ऐप खोलो ",
+                "खोलो "
+            )
+
+        for (
+        prefix in openAppPrefixes
+        ) {
+
+            if (
+                normalized.startsWith(prefix)
+            ) {
+
+                val appName =
+                    normalized
+                        .removePrefix(prefix)
+                        .trim()
+
+                if (
+                    appName.isNotBlank()
+                ) {
+
+                    return ParsedCommand(
+                        type =
+                            CommandType.OPEN_APP,
+                        value =
+                            appName
+                    )
+                }
+            }
+        }
+
+        /*
+         * --------------------------------------------------------
+         * CALL
          * --------------------------------------------------------
          */
 
@@ -319,9 +400,7 @@ class DeviceActionManager(
         ) {
 
             if (
-                normalized.startsWith(
-                    prefix
-                )
+                normalized.startsWith(prefix)
             ) {
 
                 val contact =
@@ -329,14 +408,15 @@ class DeviceActionManager(
                         .removePrefix(prefix)
                         .trim()
 
-                if (contact.isNotBlank()) {
+                if (
+                    contact.isNotBlank()
+                ) {
 
                     return ParsedCommand(
                         type =
                             CommandType.CALL,
                         contactQuery =
-                            contact,
-                        message = ""
+                            contact
                     )
                 }
             }
@@ -344,7 +424,7 @@ class DeviceActionManager(
 
         /*
          * --------------------------------------------------------
-         * WHATSAPP / MESSAGE COMMANDS
+         * WHATSAPP / MESSAGE
          * --------------------------------------------------------
          */
 
@@ -365,9 +445,7 @@ class DeviceActionManager(
         ) {
 
             if (
-                normalized.startsWith(
-                    prefix
-                )
+                normalized.startsWith(prefix)
             ) {
 
                 val remaining =
@@ -375,18 +453,11 @@ class DeviceActionManager(
                         .removePrefix(prefix)
                         .trim()
 
-                if (remaining.isBlank()) {
+                if (
+                    remaining.isBlank()
+                ) {
                     continue
                 }
-
-                /*
-                 * Examples:
-                 *
-                 * message Mom that says hi
-                 * message Mom saying hi
-                 * message Mom: hi
-                 * message Mom - hi
-                 */
 
                 val separators =
                     listOf(
@@ -446,9 +517,6 @@ class DeviceActionManager(
                  * Supports:
                  *
                  * message hi to Mom
-                 *
-                 * and:
-                 *
                  * whatsapp hi to Mom
                  */
 
@@ -492,11 +560,6 @@ class DeviceActionManager(
                         )
                     }
                 }
-
-                /*
-                 * If there is only a contact and no message,
-                 * open the contact's WhatsApp conversation.
-                 */
 
                 return ParsedCommand(
                     type =
@@ -722,12 +785,6 @@ class DeviceActionManager(
             )
         }
 
-        /*
-         * Start the action workflow before opening the dialer.
-         * This gives the accessibility system a chance to track
-         * the active phone action.
-         */
-
         NexusEyeActionWorkflow.beginCall(
             contactName =
                 contactName,
@@ -751,7 +808,7 @@ class DeviceActionManager(
                         Intent.FLAG_ACTIVITY_NEW_TASK
                 }
 
-            appContext.startActivity(
+            launchActivityForVoiceCommand(
                 intent
             )
 
@@ -788,10 +845,9 @@ class DeviceActionManager(
     ): Result {
 
         val cleanNumber =
-            phoneNumber
-                .filter {
-                    it.isDigit()
-                }
+            phoneNumber.filter {
+                it.isDigit()
+            }
 
         if (
             cleanNumber.isBlank()
@@ -803,14 +859,6 @@ class DeviceActionManager(
                     "I could not find a phone number for $contactName."
             )
         }
-
-        /*
-         * WhatsApp's wa.me format requires an international
-         * phone number without +, spaces, brackets, or dashes.
-         *
-         * We use the number exactly as stored after removing
-         * punctuation. This avoids guessing a country code.
-         */
 
         val encodedMessage =
             if (
@@ -838,11 +886,6 @@ class DeviceActionManager(
                 "https://wa.me/$cleanNumber"
             }
 
-        /*
-         * Check that NEXUS EYE Accessibility Service is enabled
-         * before starting the automatic workflow.
-         */
-
         if (
             !NexusEyeActionWorkflow.isAccessibilityServiceEnabled(
                 appContext
@@ -855,10 +898,6 @@ class DeviceActionManager(
                     "NEXUS EYE accessibility control is not enabled. Please enable it in Accessibility settings before I can automatically send WhatsApp messages."
             )
         }
-
-        /*
-         * Start the cancellable action workflow.
-         */
 
         NexusEyeActionWorkflow.beginWhatsAppMessage(
             contactName =
@@ -887,38 +926,9 @@ class DeviceActionManager(
                         Intent.FLAG_ACTIVITY_NEW_TASK
                 }
 
-            try {
-
-                appContext.startActivity(
-                    whatsappIntent
-                )
-
-            } catch (
-                whatsappException: Exception
-            ) {
-
-                /*
-                 * If the dedicated WhatsApp package cannot
-                 * handle the intent, try the normal ACTION_VIEW
-                 * handler.
-                 */
-
-                val fallbackIntent =
-                    Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse(
-                            whatsappUrl
-                        )
-                    ).apply {
-
-                        flags =
-                            Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-
-                appContext.startActivity(
-                    fallbackIntent
-                )
-            }
+            launchActivityForVoiceCommand(
+                whatsappIntent
+            )
 
             Result(
                 handled = true,
@@ -948,7 +958,7 @@ class DeviceActionManager(
 
     /*
      * ============================================================
-     * APP / WEB / SYSTEM CONTROL
+     * APPLICATION LAUNCH
      * ============================================================
      */
 
@@ -957,94 +967,260 @@ class DeviceActionManager(
     ): Result {
 
         val normalizedName =
-            normalize(requestedName)
+            normalize(
+                requestedName
+            )
+
+        /*
+         * Explicit application package mappings.
+         *
+         * FC Mobile is deliberately included so that:
+         *
+         * "open FC Mobile"
+         *
+         * does not depend on launcher-label matching.
+         */
 
         val knownPackages =
             mapOf(
-                "whatsapp" to "com.whatsapp",
-                "youtube" to "com.google.android.youtube",
-                "chrome" to "com.android.chrome",
-                "google chrome" to "com.android.chrome",
-                "gmail" to "com.google.android.gm",
-                "google maps" to "com.google.android.apps.maps",
-                "maps" to "com.google.android.apps.maps",
-                "instagram" to "com.instagram.android",
-                "facebook" to "com.facebook.katana",
-                "telegram" to "org.telegram.messenger",
-                "spotify" to "com.spotify.music",
-                "phone" to "com.google.android.dialer",
-                "dialer" to "com.google.android.dialer",
-                "camera" to "com.android.camera"
+
+                "whatsapp" to
+                        "com.whatsapp",
+
+                "youtube" to
+                        "com.google.android.youtube",
+
+                "chrome" to
+                        "com.android.chrome",
+
+                "google chrome" to
+                        "com.android.chrome",
+
+                "gmail" to
+                        "com.google.android.gm",
+
+                "google maps" to
+                        "com.google.android.apps.maps",
+
+                "maps" to
+                        "com.google.android.apps.maps",
+
+                "instagram" to
+                        "com.instagram.android",
+
+                "facebook" to
+                        "com.facebook.katana",
+
+                "telegram" to
+                        "org.telegram.messenger",
+
+                "spotify" to
+                        "com.spotify.music",
+
+                /*
+                 * EA SPORTS FC Mobile
+                 */
+
+                "fc mobile" to
+                        "com.ea.gp.fifamobile",
+
+                "fcmobile" to
+                        "com.ea.gp.fifamobile",
+
+                "fcmobile" to
+                        "com.ea.gp.fifamobile",
+
+                "ea sports fc mobile" to
+                        "com.ea.gp.fifamobile",
+
+                "ea sports fc football mobile" to
+                        "com.ea.gp.fifamobile",
+
+                "fifa mobile" to
+                        "com.ea.gp.fifamobile",
+
+                "phone" to
+                        "com.google.android.dialer",
+
+                "dialer" to
+                        "com.google.android.dialer",
+
+                "camera" to
+                        "com.android.camera"
             )
 
+        /*
+         * --------------------------------------------------------
+         * 1. KNOWN PACKAGE
+         * --------------------------------------------------------
+         */
+
         val packageName =
-            knownPackages[normalizedName]
+            knownPackages[
+                normalizedName
+            ]
 
-        if (packageName != null) {
+        if (
+            packageName != null
+        ) {
+
             val packageIntent =
-                appContext.packageManager
-                    .getLaunchIntentForPackage(packageName)
-
-            if (packageIntent != null) {
-                packageIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                return try {
-                    appContext.startActivity(packageIntent)
-                    Result(
-                        handled = true,
-                        answer = "Opening $requestedName."
+                appContext
+                    .packageManager
+                    .getLaunchIntentForPackage(
+                        packageName
                     )
-                } catch (_: ActivityNotFoundException) {
-                    Result(
-                        handled = true,
-                        answer = "I could not open $requestedName because it is not available on this phone."
-                    )
-                }
+
+            if (
+                packageIntent == null
+            ) {
+
+                return Result(
+                    handled = true,
+                    answer =
+                        "$requestedName is not installed on this phone."
+                )
+            }
+
+            packageIntent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+
+            return try {
+
+                launchActivityForVoiceCommand(
+                    packageIntent
+                )
+
+                Result(
+                    handled = true,
+                    answer =
+                        "Opening $requestedName."
+                )
+
+            } catch (
+                exception: ActivityNotFoundException
+            ) {
+
+                Result(
+                    handled = true,
+                    answer =
+                        "I could not open $requestedName."
+                )
+
+            } catch (
+                exception: SecurityException
+            ) {
+
+                Result(
+                    handled = true,
+                    answer =
+                        "Android blocked opening $requestedName from the background."
+                )
+
+            } catch (
+                exception: Exception
+            ) {
+
+                Result(
+                    handled = true,
+                    answer =
+                        "I could not open $requestedName."
+                )
             }
         }
 
+        /*
+         * --------------------------------------------------------
+         * 2. SEARCH INSTALLED LAUNCHER APPS
+         * --------------------------------------------------------
+         */
+
         val launcherIntent =
-            Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
+            Intent(
+                Intent.ACTION_MAIN
+            ).apply {
+
+                addCategory(
+                    Intent.CATEGORY_LAUNCHER
+                )
             }
 
         val matches =
-            appContext.packageManager
-                .queryIntentActivities(launcherIntent, 0)
+            appContext
+                .packageManager
+                .queryIntentActivities(
+                    launcherIntent,
+                    0
+                )
 
         val match =
-            matches.firstOrNull { info ->
+            matches.firstOrNull {
+                    info ->
+
                 val label =
-                    info.loadLabel(appContext.packageManager)
+                    info
+                        .loadLabel(
+                            appContext.packageManager
+                        )
                         ?.toString()
-                        ?.let(::normalize)
+                        ?.let(
+                            ::normalize
+                        )
                         ?: return@firstOrNull false
 
                 label == normalizedName ||
-                        label.contains(normalizedName) ||
-                        normalizedName.contains(label)
+                        label.contains(
+                            normalizedName
+                        ) ||
+                        normalizedName.contains(
+                            label
+                        )
             }
 
-        if (match != null) {
+        if (
+            match != null
+        ) {
+
             val launchIntent =
-                appContext.packageManager
+                appContext
+                    .packageManager
                     .getLaunchIntentForPackage(
                         match.activityInfo.packageName
                     )
 
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (
+                launchIntent != null
+            ) {
+
+                launchIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
 
                 return try {
-                    appContext.startActivity(launchIntent)
-                    Result(
-                        handled = true,
-                        answer = "Opening $requestedName."
+
+                    launchActivityForVoiceCommand(
+                        launchIntent
                     )
-                } catch (_: Exception) {
+
                     Result(
                         handled = true,
-                        answer = "I could not open $requestedName."
+                        answer =
+                            "Opening $requestedName."
+                    )
+
+                } catch (
+                    exception: Exception
+                ) {
+
+                    Result(
+                        handled = true,
+                        answer =
+                            "I could not open $requestedName."
                     )
                 }
             }
@@ -1052,26 +1228,163 @@ class DeviceActionManager(
 
         return Result(
             handled = true,
-            answer = "I could not find an installed app named $requestedName."
+            answer =
+                "I could not find an installed app named $requestedName."
         )
     }
+
+    /*
+     * ============================================================
+     * BACKGROUND ACTIVITY LAUNCH
+     * ============================================================
+     *
+     * Android 14/15 introduced stricter BAL rules.
+     *
+     * We therefore:
+     *
+     * 1. Try the normal activity launch first.
+     * 2. On Android 14+, create a PendingIntent with explicit
+     *    creator-side BAL permission.
+     * 3. Send it with explicit sender-side BAL permission.
+     *
+     * IMPORTANT:
+     *
+     * If the device/OEM still returns BAL_BLOCK, Android has decided
+     * that this background service is not an allowed activity launcher.
+     * Kotlin code cannot override that system decision.
+     *
+     * In that case NEXUS EYE must be converted to a system-approved
+     * interaction path such as VoiceInteractionService or another
+     * user-authorized system role.
+     */
+
+    private fun launchActivityForVoiceCommand(
+        intent: Intent
+    ) {
+
+        /*
+         * Make sure the target intent is explicitly launchable
+         * from an application context.
+         */
+
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK
+        )
+
+        /*
+         * --------------------------------------------------------
+         * API < 34
+         * --------------------------------------------------------
+         */
+
+        if (
+            Build.VERSION.SDK_INT < 34
+        ) {
+
+            appContext.startActivity(
+                intent
+            )
+
+            return
+        }
+
+        /*
+         * --------------------------------------------------------
+         * API 34+
+         * --------------------------------------------------------
+         */
+
+        val requestCode =
+            (
+                    System.identityHashCode(
+                        intent
+                    )
+                            and
+                            0x7fffffff
+                    )
+
+        /*
+         * Android 15 requires the PendingIntent creator to
+         * explicitly opt into BAL.
+         */
+
+        val creatorOptions =
+            ActivityOptions.makeBasic().apply {
+
+                pendingIntentCreatorBackgroundActivityStartMode =
+                    ActivityOptions
+                        .MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+
+        val pendingIntent =
+            PendingIntent.getActivity(
+                appContext,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                        PendingIntent.FLAG_IMMUTABLE,
+                creatorOptions.toBundle()
+            )
+
+        /*
+         * The sender also explicitly opts into BAL.
+         */
+
+        val senderOptions =
+            ActivityOptions.makeBasic().apply {
+
+                pendingIntentBackgroundActivityStartMode =
+                    ActivityOptions
+                        .MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+
+        try {
+
+            pendingIntent.send(
+                appContext,
+                0,
+                null,
+                null,
+                null,
+                null,
+                senderOptions.toBundle()
+            )
+
+        } finally {
+
+            pendingIntent.cancel()
+        }
+    }
+
+    /*
+     * ============================================================
+     * WEB SEARCH
+     * ============================================================
+     */
 
     private fun webSearch(
         query: String
     ): Result {
 
-        val cleanQuery = query.trim()
+        val cleanQuery =
+            query.trim()
 
-        if (cleanQuery.isBlank()) {
+        if (
+            cleanQuery.isBlank()
+        ) {
+
             return Result(
                 handled = true,
-                answer = "Please tell me what you want me to search for."
+                answer =
+                    "Please tell me what you want me to search for."
             )
         }
 
         val url =
             "https://www.google.com/search?q=" +
-                    Uri.encode(cleanQuery)
+                    Uri.encode(
+                        cleanQuery
+                    )
 
         return openSystemIntent(
             Intent(
@@ -1082,23 +1395,41 @@ class DeviceActionManager(
         )
     }
 
+    /*
+     * ============================================================
+     * SYSTEM INTENT
+     * ============================================================
+     */
+
     private fun openSystemIntent(
         intent: Intent,
         successMessage: String
     ): Result {
 
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK
+        )
 
         return try {
-            appContext.startActivity(intent)
-            Result(
-                handled = true,
-                answer = successMessage
+
+            launchActivityForVoiceCommand(
+                intent
             )
-        } catch (_: Exception) {
+
             Result(
                 handled = true,
-                answer = "I could not open that on this phone."
+                answer =
+                    successMessage
+            )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            Result(
+                handled = true,
+                answer =
+                    "I could not open that on this phone."
             )
         }
     }
@@ -1132,7 +1463,9 @@ class DeviceActionManager(
 
         return value
             .trim()
-            .lowercase(Locale.ROOT)
+            .lowercase(
+                Locale.ROOT
+            )
             .replace(
                 Regex("\\s+"),
                 " "

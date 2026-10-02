@@ -28,7 +28,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.thirdeye.app.language.NexusEyeLocalization
-import com.thirdeye.app.security.NexusEyeSecureKeyStore
+import com.thirdeye.app.security.NexusEyeApiCredentialStore
 
 @Composable
 fun GeminiApiKeySetupScreen(
@@ -39,9 +39,9 @@ fun GeminiApiKeySetupScreen(
     val appContext =
         context.applicationContext
 
-    val secureKeyStore =
+    val apiCredentialStore =
         remember {
-            NexusEyeSecureKeyStore(
+            NexusEyeApiCredentialStore(
                 appContext
             )
         }
@@ -59,7 +59,7 @@ fun GeminiApiKeySetupScreen(
     var isConfigured by
     remember {
         mutableStateOf(
-            secureKeyStore.hasGeminiApiKey()
+            apiCredentialStore.hasGeminiApiKey()
         )
     }
 
@@ -249,13 +249,13 @@ fun GeminiApiKeySetupScreen(
 
                     try {
 
-                        secureKeyStore
+                        apiCredentialStore
                             .saveGeminiApiKey(
                                 cleanKey
                             )
 
                         isConfigured =
-                            secureKeyStore
+                            apiCredentialStore
                                 .hasGeminiApiKey()
 
                         apiKey =
@@ -298,7 +298,7 @@ fun GeminiApiKeySetupScreen(
 
                     try {
 
-                        secureKeyStore
+                        apiCredentialStore
                             .clearGeminiApiKey()
 
                         isConfigured =

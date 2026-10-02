@@ -17,8 +17,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import com.openwakeword.OpenWakeWord
 import com.thirdeye.app.NexusEyeRuntime
-import com.thirdeye.app.R
 import com.thirdeye.app.audio.NexusEyeAssistantAudioRouter
 import com.thirdeye.app.audio.NexusEyeTtsManager
 import com.thirdeye.app.intelligence.TaskRouter
@@ -31,15 +31,17 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
- * Background "Hey Nexus" listener.
+ * Always-on local wake-word service.
  *
- * This service is started while the app is visible and microphone permission
- * has been granted. It keeps a microphone foreground-service notification
- * visible and cycles SpeechRecognizer sessions to look for the wake phrase.
+ * Microphone ownership is deliberately exclusive:
  *
- * SpeechRecognizer is not a dedicated low-power hotword engine, so this is a
- * practical wake-phrase implementation rather than a hardware/always-on DSP
- * hotword detector.
+ *   Hey Nexus -> openWakeWord owns the microphone
+ *   detection -> openWakeWord stops
+ *   command   -> Android SpeechRecognizer owns the microphone
+ *   result/TTS complete -> SpeechRecognizer stops -> openWakeWord resumes
+ *
+ * This prevents the wake-word detector and SpeechRecognizer from fighting
+ * over AudioRecord at the same time.
  */
 class NexusEyeWakeWordService : Service() {
 
@@ -54,9 +56,12 @@ class NexusEyeWakeWordService : Service() {
     private lateinit var ttsManager: NexusEyeTtsManager
     private lateinit var languageManager: LanguageManager
 
+    private var wakeWordDetector: OpenWakeWord? = null
     private var speechRecognizer: SpeechRecognizer? = null
+
     private var listeningForWakeWord = false
     private var listeningForCommand = false
+    private var wakeDetectionHandled = false
     private var commandProcessing = false
     private var destroyed = false
 
@@ -71,8 +76,7 @@ class NexusEyeWakeWordService : Service() {
 
         createNotificationChannel()
 
-        val notification =
-            buildNotification()
+        val notification = buildNotification()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceCompat.startForeground(
@@ -88,26 +92,16 @@ class NexusEyeWakeWordService : Service() {
             )
         }
 
-        taskRouter =
-            TaskRouter(
-                applicationContext
-            )
-
-        ttsManager =
-            NexusEyeTtsManager(
-                applicationContext
-            )
-
-        languageManager =
-            LanguageManager(
-                applicationContext
-            )
+        taskRouter = TaskRouter(applicationContext)
+        ttsManager = NexusEyeTtsManager(applicationContext)
+        languageManager = LanguageManager(applicationContext)
 
         if (!hasMicrophonePermission()) {
             stopSelf()
             return
         }
 
+        initializeWakeWordDetector()
         startWakeListening()
     }
 
@@ -137,19 +131,96 @@ class NexusEyeWakeWordService : Service() {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    private fun initializeWakeWordDetector() {
+        try {
+            wakeWordDetector?.stop()
+            wakeWordDetector?.release()
+        } catch (_: Exception) {
+        }
+
+        wakeWordDetector = null
+
+        try {
+            wakeWordDetector =
+                OpenWakeWord.Builder(applicationContext)
+                    .setModelAsset(WAKE_WORD_MODEL_ASSET)
+                    .setThreshold(WAKE_WORD_THRESHOLD)
+                    .setDebounceMs(WAKE_WORD_DEBOUNCE_MS)
+                    .build()
+        } catch (_: Exception) {
+            // If the ONNX asset is missing or the detector cannot initialize,
+            // do not start SpeechRecognizer as a fake wake-word detector.
+            wakeWordDetector = null
+        }
+    }
+
     private fun startWakeListening() {
         if (destroyed ||
             commandProcessing ||
+            listeningForCommand ||
             !hasMicrophonePermission()
         ) {
             return
         }
 
-        listeningForWakeWord = true
-        listeningForCommand = false
+        mainHandler.removeCallbacks(restartRunnable)
+        destroyRecognizerOnly()
 
-        startRecognizer(
-            commandMode = false
+        val detector = wakeWordDetector ?: run {
+            initializeWakeWordDetector()
+            wakeWordDetector
+        } ?: run {
+            scheduleWakeRestart(WAKE_DETECTOR_RETRY_MS)
+            return
+        }
+
+        if (listeningForWakeWord) {
+            return
+        }
+
+        wakeDetectionHandled = false
+        listeningForWakeWord = true
+
+        try {
+            detector.start { score ->
+                if (destroyed ||
+                    commandProcessing ||
+                    !listeningForWakeWord ||
+                    wakeDetectionHandled
+                ) {
+                    return@start
+                }
+
+                wakeDetectionHandled = true
+                handleWakeWordDetected(score)
+            }
+        } catch (_: Exception) {
+            listeningForWakeWord = false
+            wakeDetectionHandled = false
+            scheduleWakeRestart(WAKE_DETECTOR_RETRY_MS)
+        }
+    }
+
+    private fun handleWakeWordDetected(score: Float) {
+        // Stop openWakeWord BEFORE creating SpeechRecognizer. This is the
+        // critical microphone handoff that prevents both engines from racing.
+        listeningForWakeWord = false
+
+        try {
+            wakeWordDetector?.stop()
+        } catch (_: Exception) {
+        }
+
+        mainHandler.postDelayed(
+            {
+                if (!destroyed &&
+                    !commandProcessing &&
+                    hasMicrophonePermission()
+                ) {
+                    startCommandListening()
+                }
+            },
+            MICROPHONE_HANDOFF_DELAY_MS
         )
     }
 
@@ -164,32 +235,20 @@ class NexusEyeWakeWordService : Service() {
         listeningForWakeWord = false
         listeningForCommand = true
 
-        startRecognizer(
-            commandMode = true
-        )
-    }
-
-    private fun startRecognizer(
-        commandMode: Boolean
-    ) {
-        mainHandler.removeCallbacks(
-            restartRunnable
-        )
-
         destroyRecognizerOnly()
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            scheduleWakeRestart()
+            listeningForCommand = false
+            scheduleWakeRestart(COMMAND_ERROR_RESTART_MS)
             return
         }
 
         val recognizer =
             try {
-                SpeechRecognizer.createSpeechRecognizer(
-                    this
-                )
+                SpeechRecognizer.createSpeechRecognizer(this)
             } catch (_: Exception) {
-                scheduleWakeRestart()
+                listeningForCommand = false
+                scheduleWakeRestart(COMMAND_ERROR_RESTART_MS)
                 return
             }
 
@@ -198,41 +257,26 @@ class NexusEyeWakeWordService : Service() {
         recognizer.setRecognitionListener(
             object : RecognitionListener {
 
-                override fun onReadyForSpeech(
-                    params: Bundle?
-                ) {
-                }
+                override fun onReadyForSpeech(params: Bundle?) = Unit
 
-                override fun onBeginningOfSpeech() {
-                }
+                override fun onBeginningOfSpeech() = Unit
 
-                override fun onRmsChanged(
-                    rmsdB: Float
-                ) {
-                }
+                override fun onRmsChanged(rmsdB: Float) = Unit
 
-                override fun onBufferReceived(
-                    buffer: ByteArray?
-                ) {
-                }
+                override fun onBufferReceived(buffer: ByteArray?) = Unit
 
-                override fun onEndOfSpeech() {
-                }
+                override fun onEndOfSpeech() = Unit
 
-                override fun onError(
-                    error: Int
-                ) {
-                    listeningForWakeWord = false
+                override fun onError(error: Int) {
                     listeningForCommand = false
+                    destroyRecognizerOnly()
 
                     if (!commandProcessing) {
-                        scheduleWakeRestart()
+                        scheduleWakeRestart(COMMAND_ERROR_RESTART_MS)
                     }
                 }
 
-                override fun onResults(
-                    results: Bundle?
-                ) {
+                override fun onResults(results: Bundle?) {
                     val text =
                         results
                             ?.getStringArrayList(
@@ -242,57 +286,38 @@ class NexusEyeWakeWordService : Service() {
                             ?.trim()
                             .orEmpty()
 
-                    listeningForWakeWord = false
                     listeningForCommand = false
+                    destroyRecognizerOnly()
 
-                    if (commandMode) {
-                        processCommand(
-                            text
-                        )
+                    if (text.isBlank()) {
+                        scheduleWakeRestart(COMMAND_ERROR_RESTART_MS)
                     } else {
-                        handleWakeRecognition(
-                            text
-                        )
+                        processCommand(text)
                     }
                 }
 
-                override fun onPartialResults(
-                    partialResults: Bundle?
-                ) {
-                    if (!commandMode) {
-                        val text =
-                            partialResults
-                                ?.getStringArrayList(
-                                    SpeechRecognizer.RESULTS_RECOGNITION
-                                )
-                                ?.firstOrNull()
-                                ?.trim()
-                                .orEmpty()
-
-                        val command =
-                            extractCommandAfterWakeWord(
-                                text
-                            )
-
-                        if (command != null && command.isNotBlank()) {
-                            cancelRecognizer()
-                            processCommand(
-                                command
-                            )
-                        }
-                    }
-                }
+                override fun onPartialResults(partialResults: Bundle?) = Unit
 
                 override fun onEvent(
                     eventType: Int,
                     params: Bundle?
-                ) {
-                }
+                ) = Unit
             }
         )
 
+        val speechLanguage =
+            languageManager
+                .getCurrentState()
+                .speechLanguage
+
         val languageTag =
-            Locale.getDefault().toLanguageTag()
+            if (speechLanguage.id == "hi") {
+                "hi-IN"
+            } else {
+                Locale.forLanguageTag(speechLanguage.id)
+                    .toLanguageTag()
+                    .ifBlank { Locale.getDefault().toLanguageTag() }
+            }
 
         val intent =
             Intent(
@@ -302,22 +327,28 @@ class NexusEyeWakeWordService : Service() {
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
                 )
-
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE,
                     languageTag
                 )
-
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,
                     languageTag
                 )
-
                 putExtra(
                     RecognizerIntent.EXTRA_PARTIAL_RESULTS,
-                    true
+                    false
                 )
-
+                // Keep the command session short after the user finishes
+                // speaking. Some recognition providers honor these values.
+                putExtra(
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                    350L
+                )
+                putExtra(
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                    600L
+                )
                 putExtra(
                     RecognizerIntent.EXTRA_MAX_RESULTS,
                     5
@@ -325,100 +356,24 @@ class NexusEyeWakeWordService : Service() {
             }
 
         try {
-            recognizer.startListening(
-                intent
-            )
+            recognizer.startListening(intent)
         } catch (_: Exception) {
-            listeningForWakeWord = false
             listeningForCommand = false
-            scheduleWakeRestart()
+            destroyRecognizerOnly()
+            scheduleWakeRestart(COMMAND_ERROR_RESTART_MS)
         }
     }
 
-    private fun handleWakeRecognition(
-        recognizedText: String
-    ) {
-        val command =
-            extractCommandAfterWakeWord(
-                recognizedText
-            )
-
-        if (command != null) {
-            if (command.isBlank()) {
-                // Support the natural two-step flow:
-                // "Hey Nexus" -> wait for the command.
-                startCommandListening()
-            } else {
-                // Also support the one-step flow:
-                // "Hey Nexus, navigate home".
-                processCommand(
-                    command
-                )
-            }
-            return
-        }
-
-        scheduleWakeRestart(
-            delayMillis = 350L
-        )
-    }
-
-    private fun extractCommandAfterWakeWord(
-        text: String
-    ): String? {
-        val normalized =
-            text
-                .trim()
-                .lowercase(Locale.ROOT)
-
-        val wakePhrases =
-            listOf(
-                "hey nexus",
-                "hey nexis",
-                "hey nex us",
-                "hey next us",
-                "hey nexus"
-            )
-
-        for (wakePhrase in wakePhrases) {
-            val index =
-                normalized.indexOf(
-                    wakePhrase
-                )
-
-            if (index >= 0) {
-                val originalAfter =
-                    text
-                        .substring(
-                            (index + wakePhrase.length)
-                                .coerceAtMost(text.length)
-                        )
-                        .trim()
-
-                return originalAfter.ifBlank {
-                    ""
-                }
-            }
-        }
-
-        return null
-    }
-
-    private fun processCommand(
-        command: String
-    ) {
-        val cleanCommand =
-            command.trim()
+    private fun processCommand(command: String) {
+        val cleanCommand = command.trim()
 
         if (cleanCommand.isBlank()) {
-            scheduleWakeRestart(
-                delayMillis = 450L
-            )
+            scheduleWakeRestart(COMMAND_ERROR_RESTART_MS)
             return
         }
 
         commandProcessing = true
-        cancelRecognizer()
+        destroyRecognizerOnly()
 
         serviceScope.launch {
             try {
@@ -437,12 +392,10 @@ class NexusEyeWakeWordService : Service() {
                     NexusEyeRuntime.getBleManager()
 
                 if (bleManager == null) {
-                    // MainActivity has not registered an active BLE manager,
-                    // so use the existing phone fallback.
                     try {
                         if (!ttsManager.setLanguage(speechLanguage)) {
                             commandProcessing = false
-                            scheduleWakeRestart(250L)
+                            scheduleWakeRestart(TTS_RESTART_DELAY_MS)
                             return@launch
                         }
 
@@ -451,16 +404,16 @@ class NexusEyeWakeWordService : Service() {
                             language = speechLanguage,
                             onComplete = {
                                 commandProcessing = false
-                                scheduleWakeRestart(250L)
+                                scheduleWakeRestart(TTS_RESTART_DELAY_MS)
                             },
                             onError = {
                                 commandProcessing = false
-                                scheduleWakeRestart(250L)
+                                scheduleWakeRestart(TTS_RESTART_DELAY_MS)
                             }
                         )
                     } catch (_: Exception) {
                         commandProcessing = false
-                        scheduleWakeRestart(250L)
+                        scheduleWakeRestart(TTS_RESTART_DELAY_MS)
                     }
                     return@launch
                 }
@@ -479,26 +432,22 @@ class NexusEyeWakeWordService : Service() {
                     onSuccess = {
                         audioRouter.shutdown()
                         commandProcessing = false
-                        scheduleWakeRestart(250L)
+                        scheduleWakeRestart(TTS_RESTART_DELAY_MS)
                     },
                     onError = {
                         audioRouter.shutdown()
                         commandProcessing = false
-                        scheduleWakeRestart(250L)
+                        scheduleWakeRestart(TTS_RESTART_DELAY_MS)
                     }
                 )
             } catch (_: Exception) {
                 commandProcessing = false
-                scheduleWakeRestart(
-                    delayMillis = 250L
-                )
+                scheduleWakeRestart(TTS_RESTART_DELAY_MS)
             }
         }
     }
 
-    private fun scheduleWakeRestart(
-        delayMillis: Long = 800L
-    ) {
+    private fun scheduleWakeRestart(delayMillis: Long = DEFAULT_WAKE_RESTART_MS) {
         if (destroyed ||
             commandProcessing ||
             !hasMicrophonePermission()
@@ -506,45 +455,29 @@ class NexusEyeWakeWordService : Service() {
             return
         }
 
-        mainHandler.removeCallbacks(
-            restartRunnable
-        )
-
-        mainHandler.postDelayed(
-            restartRunnable,
-            delayMillis
-        )
-    }
-
-    private fun cancelRecognizer() {
-        try {
-            speechRecognizer?.cancel()
-        } catch (_: Exception) {
-        }
-
-        destroyRecognizerOnly()
-
-        listeningForWakeWord = false
-        listeningForCommand = false
+        mainHandler.removeCallbacks(restartRunnable)
+        mainHandler.postDelayed(restartRunnable, delayMillis)
     }
 
     private fun destroyRecognizerOnly() {
-        val recognizer =
-            speechRecognizer
+        val recognizer = speechRecognizer
+        speechRecognizer = null
 
-        speechRecognizer =
-            null
+        try {
+            recognizer?.cancel()
+        } catch (_: Exception) {
+        }
 
         try {
             recognizer?.destroy()
         } catch (_: Exception) {
         }
+
+        listeningForCommand = false
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT <
-            Build.VERSION_CODES.O
-        ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return
         }
 
@@ -558,45 +491,37 @@ class NexusEyeWakeWordService : Service() {
                     "Keeps Hey Nexus voice activation available while NEXUS EYE is in the background."
             }
 
-        getSystemService(
-            NotificationManager::class.java
-        )?.createNotificationChannel(
-            channel
-        )
+        getSystemService(NotificationManager::class.java)
+            ?.createNotificationChannel(channel)
     }
 
     private fun buildNotification(): Notification {
-        return NotificationCompat.Builder(
-            this,
-            CHANNEL_ID
-        )
-            .setSmallIcon(
-                android.R.drawable.ic_btn_speak_now
-            )
-            .setContentTitle(
-                "NEXUS EYE voice activation"
-            )
-            .setContentText(
-                "Say Hey Nexus to activate NEXUS EYE."
-            )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setContentTitle("NEXUS EYE voice activation")
+            .setContentText("Say Hey Nexus to activate NEXUS EYE.")
             .setOngoing(true)
-            .setCategory(
-                NotificationCompat.CATEGORY_SERVICE
-            )
-            .setPriority(
-                NotificationCompat.PRIORITY_LOW
-            )
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
     override fun onDestroy() {
         destroyed = true
+        mainHandler.removeCallbacksAndMessages(null)
 
-        mainHandler.removeCallbacksAndMessages(
-            null
-        )
+        try {
+            wakeWordDetector?.stop()
+        } catch (_: Exception) {
+        }
 
-        cancelRecognizer()
+        try {
+            wakeWordDetector?.release()
+        } catch (_: Exception) {
+        }
+
+        wakeWordDetector = null
+        destroyRecognizerOnly()
 
         try {
             ttsManager.shutdown()
@@ -604,19 +529,28 @@ class NexusEyeWakeWordService : Service() {
         }
 
         serviceScope.cancel()
-
         super.onDestroy()
     }
 
-    override fun onBind(
-        intent: Intent?
-    ): IBinder? = null
+    override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        private const val CHANNEL_ID =
-            "nexus_eye_wake_word"
+        private const val CHANNEL_ID = "nexus_eye_wake_word"
+        private const val NOTIFICATION_ID = 4701
 
-        private const val NOTIFICATION_ID =
-            4701
+        private const val WAKE_WORD_MODEL_ASSET = "hey_nexus.onnx"
+
+        // The trained model had a best validation point around this range;
+        // keep the diagnostic threshold configurable in one place.
+        private const val WAKE_WORD_THRESHOLD = 0.10f
+        private const val WAKE_WORD_DEBOUNCE_MS = 2000L
+
+        // Short handoff: openWakeWord must release AudioRecord before the
+        // Android speech recognizer attempts to acquire the microphone.
+        private const val MICROPHONE_HANDOFF_DELAY_MS = 50L
+        private const val COMMAND_ERROR_RESTART_MS = 100L
+        private const val TTS_RESTART_DELAY_MS = 100L
+        private const val DEFAULT_WAKE_RESTART_MS = 100L
+        private const val WAKE_DETECTOR_RETRY_MS = 500L
     }
 }

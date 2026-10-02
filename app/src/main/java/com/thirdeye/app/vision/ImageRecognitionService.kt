@@ -2,7 +2,7 @@ package com.thirdeye.app.vision
 
 import android.content.Context
 import android.util.Base64
-import com.thirdeye.app.security.NexusEyeSecureKeyStore
+import com.thirdeye.app.security.NexusEyeApiCredentialStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -21,9 +21,9 @@ class ImageRecognitionService(
     context: Context? = null
 ) {
 
-    private val secureKeyStore: NexusEyeSecureKeyStore? =
+    private val apiCredentialStore: NexusEyeApiCredentialStore? =
         context?.applicationContext?.let {
-            NexusEyeSecureKeyStore(it)
+            NexusEyeApiCredentialStore(it)
         }
 
     companion object {
@@ -48,7 +48,7 @@ class ImageRecognitionService(
      *
      * This is the preferred method.
      *
-     * The API key is loaded from NexusEyeSecureKeyStore and is
+     * The API key is loaded from NexusEyeApiCredentialStore and is
      * never passed into the UI as a plain configuration value.
      */
     suspend fun recognizeImage(
@@ -58,7 +58,7 @@ class ImageRecognitionService(
     ): Result<ImageRecognitionResult> {
 
         val apiKey =
-            secureKeyStore
+            apiCredentialStore
                 ?.getGeminiApiKey()
                 .orEmpty()
 

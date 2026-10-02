@@ -271,6 +271,96 @@ class NexusEyeNavigationManager(
         )
     }
 
+    fun navigateToCoordinates(
+        latitude: Double,
+        longitude: Double,
+        displayName: String,
+        strideMeters: Double = 0.70
+    ) {
+
+        if (
+            latitude !in -90.0..90.0 ||
+            longitude !in -180.0..180.0
+        ) {
+
+            _status.value =
+                "Saved Home coordinates are invalid."
+
+            speak(
+                _status.value
+            )
+
+            return
+        }
+
+        destinationJob?.cancel()
+
+        destinationJob =
+            scope.launch {
+
+                _isResolvingDestination.value =
+                    true
+
+                _status.value =
+                    "Starting navigation to $displayName."
+
+                stopNavigationInternal(
+                    announceStop = false
+                )
+
+                try {
+
+                    val resolved =
+                        NexusEyeResolvedDestination(
+                            query =
+                                "$latitude,$longitude",
+                            displayName =
+                                displayName,
+                            latitude =
+                                latitude,
+                            longitude =
+                                longitude
+                        )
+
+                    _destination.value =
+                        resolved
+
+                    speak(
+                        "Starting navigation to $displayName."
+                    )
+
+                    liveSession.start(
+                        destinationLatitude =
+                            latitude,
+                        destinationLongitude =
+                            longitude,
+                        strideMeters =
+                            strideMeters
+                    )
+
+                } catch (
+                    exception: Exception
+                ) {
+
+                    val message =
+                        exception.message
+                            ?: "I could not start navigation home."
+
+                    _status.value =
+                        message
+
+                    speak(
+                        message
+                    )
+
+                } finally {
+
+                    _isResolvingDestination.value =
+                        false
+                }
+            }
+    }
+
     fun shutdown() {
 
         destinationJob?.cancel()

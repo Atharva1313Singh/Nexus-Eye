@@ -17,7 +17,7 @@ android {
             "com.thirdeye.app"
 
         minSdk =
-            23
+            26
 
         targetSdk =
             35
@@ -86,6 +86,10 @@ dependencies {
 
     implementation(
         "androidx.core:core-ktx:1.15.0"
+    )
+
+    implementation(
+        "com.github.msnilsen:openwakeword-android:0.1.0"
     )
 
     implementation(

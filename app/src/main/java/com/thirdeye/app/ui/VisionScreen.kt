@@ -46,7 +46,7 @@ import com.thirdeye.app.language.LanguageManager
 import com.thirdeye.app.language.LanguageState
 import com.thirdeye.app.language.NexusEyeLanguages
 import com.thirdeye.app.language.NexusEyeLocalization
-import com.thirdeye.app.security.NexusEyeSecureKeyStore
+import com.thirdeye.app.security.NexusEyeApiCredentialStore
 import com.thirdeye.app.vision.FaceProfileStore
 import com.thirdeye.app.vision.FaceRecognitionEngine
 import com.thirdeye.app.vision.ImageRecognitionService
@@ -99,9 +99,9 @@ fun VisionScreen(
             )
         }
 
-    val secureKeyStore =
+    val apiCredentialStore =
         remember {
-            NexusEyeSecureKeyStore(
+            NexusEyeApiCredentialStore(
                 appContext
             )
         }
@@ -315,7 +315,7 @@ fun VisionScreen(
         }
 
         if (
-            !secureKeyStore
+            !apiCredentialStore
                 .hasGeminiApiKey()
         ) {
 
