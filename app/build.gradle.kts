@@ -91,6 +91,7 @@ dependencies {
     implementation(
         "com.github.msnilsen:openwakeword-android:0.1.0"
     )
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 
     implementation(
         "androidx.activity:activity-compose:1.10.0"
@@ -154,6 +155,7 @@ dependencies {
     implementation(
         "com.google.mlkit:text-recognition-chinese:16.0.1"
     )
+    implementation("androidx.compose.material:material-icons-extended")
 
     implementation(
         "com.google.mlkit:text-recognition-japanese:16.0.1"
@@ -162,10 +164,7 @@ dependencies {
     implementation(
         "com.google.mlkit:text-recognition-korean:16.0.1"
     )
-
-    implementation(
-        "org.tensorflow:tensorflow-lite:2.17.0"
-    )
+    implementation("com.google.ai.edge.litert:litert:1.4.0")
 
     debugImplementation(
         "androidx.compose.ui:ui-tooling"

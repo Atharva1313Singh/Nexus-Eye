@@ -3,118 +3,80 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- ========================================================= -->
-    <!-- MICROPHONE                                                -->
+    <!-- MICROPHONE                                                 -->
     <!-- ========================================================= -->
 
-    <uses-permission
-        android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- ========================================================= -->
+    <!-- FOREGROUND SERVICE                                         -->
+    <!-- ========================================================= -->
 
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- Required because NexusEyeWakeWordService uses microphone -->
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
-
     <!-- ========================================================= -->
-    <!-- CONTACTS / PHONE                                          -->
-    <!-- ========================================================= -->
-
-    <uses-permission
-        android:name="android.permission.READ_CONTACTS" />
-
-    <uses-permission
-        android:name="android.permission.WRITE_CONTACTS" />
-
-    <uses-permission
-        android:name="android.permission.CALL_PHONE" />
-
-    <uses-permission
-        android:name="android.permission.READ_PHONE_STATE" />
-
-
-    <!-- ========================================================= -->
-    <!-- NOTIFICATIONS                                             -->
+    <!-- BLUETOOTH                                                  -->
     <!-- ========================================================= -->
 
-    <uses-permission
-        android:name="android.permission.POST_NOTIFICATIONS" />
-
-
-    <!-- ========================================================= -->
-    <!-- BLUETOOTH                                                 -->
-    <!-- ========================================================= -->
-
+    <!-- Android 12+ -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <uses-permission
-        android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation" />
+        android:name="android.permission.BLUETOOTH_SCAN" />
 
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_ADVERTISE" />
-
+    <!-- Android 11 and below -->
     <uses-permission
         android:name="android.permission.BLUETOOTH" />
 
     <uses-permission
         android:name="android.permission.BLUETOOTH_ADMIN" />
 
-
     <!-- ========================================================= -->
-    <!-- LOCATION                                                  -->
+    <!-- LOCATION                                                   -->
     <!-- ========================================================= -->
 
+    <!-- Needed by some Bluetooth/location functionality on older
+         Android versions and depending on your existing BLE code. -->
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <uses-permission
         android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- ========================================================= -->
+    <!-- NOTIFICATIONS                                              -->
+    <!-- ========================================================= -->
+
+    <!-- Android 13+ -->
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- ========================================================= -->
-    <!-- INTERNET                                                  -->
+    <!-- ANDROID DIGITAL ASSISTANT                                  -->
     <!-- ========================================================= -->
 
     <uses-permission
-        android:name="android.permission.INTERNET" />
-
-    <uses-permission
-        android:name="android.permission.ACCESS_NETWORK_STATE" />
-
+        android:name="android.permission.BIND_VOICE_INTERACTION" />
 
     <!-- ========================================================= -->
-    <!-- CAMERA                                                    -->
-    <!-- ========================================================= -->
-
-    <uses-permission
-        android:name="android.permission.CAMERA" />
-
-
-    <!-- ========================================================= -->
-    <!-- SYSTEM                                                     -->
-    <!-- ========================================================= -->
-
-    <uses-permission
-        android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
-
-    <!-- ========================================================= -->
-    <!-- APPLICATION                                               -->
+    <!-- APPLICATION                                                 -->
     <!-- ========================================================= -->
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="NEXUS EYE"
+        android:label="Nexus-Eye"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.NexusEye">
 
-
         <!-- ===================================================== -->
-        <!-- MAIN ACTIVITY                                         -->
+        <!-- MAIN ACTIVITY                                          -->
         <!-- ===================================================== -->
 
         <activity
@@ -133,27 +95,15 @@
 
         </activity>
 
-
         <!-- ===================================================== -->
-        <!-- NEXUS EYE WAKE WORD SERVICE                           -->
-        <!-- ===================================================== -->
-
-        <service
-            android:name=".voice.NexusEyeWakeWordService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
-
-
-        <!-- ===================================================== -->
-        <!-- NEXUS EYE VOICE INTERACTION SERVICE                   -->
+        <!-- NEXUS-EYE DIGITAL ASSISTANT                            -->
         <!-- ===================================================== -->
 
         <service
             android:name=".voice.NexusEyeVoiceInteractionService"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            android:label="Nexus-Eye"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true">
 
             <intent-filter>
 
@@ -168,15 +118,24 @@
 
         </service>
 
-
         <!-- ===================================================== -->
-        <!-- NEXUS EYE VOICE INTERACTION SESSION SERVICE           -->
+        <!-- DIGITAL ASSISTANT SESSION SERVICE                     -->
         <!-- ===================================================== -->
 
         <service
             android:name=".voice.NexusEyeVoiceInteractionSessionService"
-            android:enabled="true"
+            android:label="Nexus-Eye Voice Session"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
             android:exported="false" />
+
+        <!-- ===================================================== -->
+        <!-- EXISTING ALWAYS-ON WAKE WORD SERVICE                  -->
+        <!-- ===================================================== -->
+
+        <service
+            android:name=".voice.NexusEyeWakeWordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
     </application>
 

@@ -1,241 +1,55 @@
 package com.thirdeye.app.voice
 
-import android.content.ComponentName
-import android.content.Intent
 import android.os.Bundle
 import android.service.voice.VoiceInteractionSession
-import android.service.voice.VoiceInteractionService
 import android.util.Log
 
 /**
- * NEXUS EYE global VoiceInteractionService.
+ * Minimal voice interaction session.
  *
- * Android keeps the currently selected VoiceInteractionService
- * available so it can participate in voice interaction/hotword
- * workflows.
- *
- * IMPORTANT:
- *
- * This does NOT replace NexusEyeWakeWordService.
- *
- * NEXUS EYE still uses:
- *
- *     openWakeWord
- *          ↓
- *     "Hey Nexus"
- *          ↓
- *     stop wake-word microphone
- *          ↓
- *     Android SpeechRecognizer
- *          ↓
- *     TaskRouter
- *
- * This service gives Android an official voice-interaction
- * component for NEXUS EYE.
+ * The existing Nexus-Eye command architecture remains unchanged.
+ * This class is only the Android Digital Assistant entry point.
  */
-class NexusEyeVoiceInteractionService :
-    VoiceInteractionService() {
+class NexusEyeVoiceInteractionSession(
+    context: android.content.Context
+) : VoiceInteractionSession(context) {
 
     companion object {
-
-        private const val TAG =
-            "NexusEyeVoiceInteraction"
-
-        @Volatile
-        private var instance:
-                NexusEyeVoiceInteractionService? =
-            null
-
-        fun getInstance():
-                NexusEyeVoiceInteractionService? {
-            return instance
-        }
-
-        fun isActive(
-            context: android.content.Context
-        ): Boolean {
-
-            return try {
-
-                VoiceInteractionService
-                    .isActiveService(
-                        context,
-                        ComponentName(
-                            context,
-                            NexusEyeVoiceInteractionService::class.java
-                        )
-                    )
-
-            } catch (
-                exception: Exception
-            ) {
-
-                false
-            }
-        }
+        private const val TAG = "NexusEyeVoiceSession"
     }
 
-    override fun onCreate() {
-        super.onCreate()
-
-        instance = this
-
-        Log.d(
-            TAG,
-            "NEXUS EYE VoiceInteractionService created"
-        )
-    }
-
-    override fun onReady() {
-        super.onReady()
-
-        Log.d(
-            TAG,
-            "NEXUS EYE VoiceInteractionService ready"
-        )
-
-        /*
-         * Do not start SpeechRecognizer here.
-         *
-         * Do not start another microphone listener here.
-         *
-         * The existing NexusEyeWakeWordService owns the
-         * openWakeWord microphone pipeline.
-         */
-    }
-
-    override fun onPrepareToShowSession(
-        args: Bundle,
-        flags: Int
+    override fun onShow(
+        args: Bundle?,
+        showFlags: Int
     ) {
-        super.onPrepareToShowSession(
-            args,
-            flags
-        )
+        super.onShow(args, showFlags)
 
-        Log.d(
+        Log.i(
             TAG,
-            "Preparing voice interaction session"
+            "Nexus-Eye Digital Assistant session shown"
         )
-    }
-
-    override fun onLaunchVoiceAssistFromKeyguard() {
-        super.onLaunchVoiceAssistFromKeyguard()
-
-        Log.d(
-            TAG,
-            "Voice assist launched from keyguard"
-        )
-    }
-
-    /**
-     * Opens an activity through the active voice-interaction
-     * service.
-     *
-     * This is different from calling startActivity() from an
-     * ordinary background foreground-service process.
-     */
-    fun launchVoiceActivity(
-        intent: Intent
-    ): Boolean {
-
-        return try {
-
-            intent.addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-            )
-
-            startActivity(
-                intent
-            )
-
-            Log.d(
-                TAG,
-                "VoiceInteractionService launched: " +
-                        intent.component
-            )
-
-            true
-
-        } catch (
-            exception: Exception
-        ) {
-
-            Log.e(
-                TAG,
-                "VoiceInteractionService failed to launch activity",
-                exception
-            )
-
-            false
-        }
-    }
-
-    /**
-     * Request Android to show the voice interaction session.
-     *
-     * This can be used later if you want NEXUS EYE to show a
-     * visible assistant UI.
-     */
-    fun showNexusSession() {
-
-        try {
-
-            showSession(
-                Bundle(),
-                VoiceInteractionSession.SHOW_WITH_ASSIST
-            )
-
-        } catch (
-            exception: Exception
-        ) {
-
-            Log.e(
-                TAG,
-                "Could not show NEXUS EYE voice session",
-                exception
-            )
-        }
-    }
-
-    override fun onGetSupportedVoiceActions(
-        actions: Set<String>
-    ): Set<String> {
 
         /*
-         * We don't claim support for arbitrary Android
-         * extended voice actions.
+         * Do not create another SpeechRecognizer here.
          *
-         * Our own TaskRouter continues handling commands.
+         * Your existing:
+         *
+         * NexusEyeWakeWordService
+         *       ->
+         * NexusEyeSpeechRecognizer
+         *       ->
+         * TaskRouter
+         *
+         * remains the command pipeline.
          */
-
-        return emptySet()
     }
 
-    override fun onShutdown() {
-
-        Log.d(
+    override fun onHide() {
+        Log.i(
             TAG,
-            "NEXUS EYE VoiceInteractionService shutting down"
+            "Nexus-Eye Digital Assistant session hidden"
         )
 
-        super.onShutdown()
-    }
-
-    override fun onDestroy() {
-
-        Log.d(
-            TAG,
-            "NEXUS EYE VoiceInteractionService destroyed"
-        )
-
-        if (
-            instance === this
-        ) {
-            instance = null
-        }
-
-        super.onDestroy()
+        super.onHide()
     }
 }

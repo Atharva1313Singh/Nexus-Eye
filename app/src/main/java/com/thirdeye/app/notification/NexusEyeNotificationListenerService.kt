@@ -1,62 +1,45 @@
-package com.thirdeye.app.notifications
+package com.thirdeye.app.notification
 
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import android.util.Log
 
-class NexusEyeNotificationListenerService :
-    NotificationListenerService() {
+class NexusEyeNotificationListenerService : NotificationListenerService() {
 
     companion object {
-
-        private val _isConnected =
-            MutableStateFlow(false)
-
-        val isConnected =
-            _isConnected.asStateFlow()
+        private const val TAG = "NexusEyeNotification"
     }
 
     override fun onListenerConnected() {
-
         super.onListenerConnected()
 
-        _isConnected.value =
-            true
-    }
-
-    override fun onListenerDisconnected() {
-
-        _isConnected.value =
-            false
-
-        super.onListenerDisconnected()
+        Log.d(TAG, "NEXUS EYE Notification Access connected")
     }
 
     override fun onNotificationPosted(
         sbn: StatusBarNotification
     ) {
-        /*
-         * Notification reception is intentionally kept separate
-         * from the UI. Future notification-reading features can
-         * consume the notification data here without changing
-         * the permission/setup flow.
-         */
+        Log.d(
+            TAG,
+            "Notification posted: ${sbn.packageName}"
+        )
     }
 
     override fun onNotificationRemoved(
         sbn: StatusBarNotification
     ) {
-        /*
-         * Notification removal is received here by Android.
-         */
+        Log.d(
+            TAG,
+            "Notification removed: ${sbn.packageName}"
+        )
     }
 
-    override fun onDestroy() {
+    override fun onListenerDisconnected() {
+        Log.d(
+            TAG,
+            "NEXUS EYE Notification Access disconnected"
+        )
 
-        _isConnected.value =
-            false
-
-        super.onDestroy()
+        super.onListenerDisconnected()
     }
 }
