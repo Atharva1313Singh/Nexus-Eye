@@ -9,6 +9,7 @@ import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.provider.ContactsContract
 import androidx.core.content.ContextCompat
 import java.net.URLEncoder
@@ -42,7 +43,17 @@ class DeviceActionManager(
         WEB_SEARCH,
         OPEN_SETTINGS,
         OPEN_CAMERA,
-        OPEN_MAPS
+        OPEN_MAPS,
+        ACCESSIBILITY_BACK,
+        ACCESSIBILITY_HOME,
+        ACCESSIBILITY_RECENTS,
+        ACCESSIBILITY_NOTIFICATIONS,
+        ACCESSIBILITY_QUICK_SETTINGS,
+        ACCESSIBILITY_CLICK,
+        ACCESSIBILITY_TYPE,
+        ACCESSIBILITY_SCROLL,
+        ACCESSIBILITY_READ_SCREEN,
+        ACCESSIBILITY_SEARCH_MESSAGES
     }
 
     /*
@@ -96,6 +107,69 @@ class DeviceActionManager(
                         )
                     ),
                     "Opening Maps for ${parsed.value}."
+                )
+
+            CommandType.ACCESSIBILITY_BACK ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilityBack(),
+                    "Going back."
+                )
+
+            CommandType.ACCESSIBILITY_HOME ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilityHome(),
+                    "Going to the home screen."
+                )
+
+            CommandType.ACCESSIBILITY_RECENTS ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilityRecents(),
+                    "Opening recent apps."
+                )
+
+            CommandType.ACCESSIBILITY_NOTIFICATIONS ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilityNotifications(),
+                    "Opening notifications."
+                )
+
+            CommandType.ACCESSIBILITY_QUICK_SETTINGS ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilityQuickSettings(),
+                    "Opening quick settings."
+                )
+
+            CommandType.ACCESSIBILITY_CLICK ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilityClick(parsed.value),
+                    "Activating ${parsed.value}."
+                )
+
+            CommandType.ACCESSIBILITY_TYPE ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilityType(parsed.value),
+                    "Typing your text."
+                )
+
+            CommandType.ACCESSIBILITY_SCROLL ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilityScroll(parsed.value),
+                    "Scrolling ${parsed.value}."
+                )
+
+            CommandType.ACCESSIBILITY_READ_SCREEN -> {
+                val text = NexusEyeActionWorkflow.accessibilityReadScreen()
+                return if (text.isBlank()) {
+                    Result(true, "I cannot read the current screen. Please make sure Accessibility access is enabled.")
+                } else {
+                    Result(true, text)
+                }
+            }
+
+            CommandType.ACCESSIBILITY_SEARCH_MESSAGES ->
+                return accessibilityResult(
+                    NexusEyeActionWorkflow.accessibilitySearchMessages(parsed.value),
+                    "Searching messages for ${parsed.value}."
                 )
 
             else -> Unit
@@ -196,8 +270,9 @@ class DeviceActionManager(
         query: String
     ): ParsedCommand? {
 
+        val rawQuery = query.trim()
         val normalized =
-            normalize(query)
+            normalize(rawQuery)
 
         if (normalized.isBlank()) {
             return null
@@ -294,6 +369,66 @@ class DeviceActionManager(
 
         /*
          * --------------------------------------------------------
+         * GENERIC ACCESSIBILITY / VOICE CONTROL
+         * --------------------------------------------------------
+         * These commands work through the user-enabled accessibility
+         * service. They provide a general control layer for apps whose
+         * UI is exposed through AccessibilityNodeInfo, instead of relying
+         * on app-specific automation for every package.
+         */
+
+        when (normalized) {
+            "go back", "back", "पीछे जाओ", "वापस जाओ" ->
+                return ParsedCommand(CommandType.ACCESSIBILITY_BACK)
+            "go home", "home screen", "open home", "होम खोलो" ->
+                return ParsedCommand(CommandType.ACCESSIBILITY_HOME)
+            "recent apps", "show recent apps", "हाल के ऐप" ->
+                return ParsedCommand(CommandType.ACCESSIBILITY_RECENTS)
+            "open notifications", "show notifications", "notifications खोलो" ->
+                return ParsedCommand(CommandType.ACCESSIBILITY_NOTIFICATIONS)
+            "open quick settings", "quick settings", "त्वरित सेटिंग" ->
+                return ParsedCommand(CommandType.ACCESSIBILITY_QUICK_SETTINGS)
+            "read screen", "read this screen", "what is on the screen", "स्क्रीन पढ़ो", "स्क्रीन पर क्या है" ->
+                return ParsedCommand(CommandType.ACCESSIBILITY_READ_SCREEN)
+        }
+
+        val clickPrefixes = listOf("click ", "tap ", "press ", "क्लिक ", "दबाओ ")
+        clickPrefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
+            val target = normalized.removePrefix(prefix).trim()
+            if (target.isNotBlank()) {
+                return ParsedCommand(CommandType.ACCESSIBILITY_CLICK, value = target)
+            }
+        }
+
+        val typePrefixes = listOf("type ", "enter text ", "write ", "टाइप ", "लिखो ")
+        typePrefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
+            val text = rawQuery.substring(prefix.length).trim()
+            if (text.isNotBlank()) {
+                return ParsedCommand(CommandType.ACCESSIBILITY_TYPE, value = text)
+            }
+        }
+
+        val scrollPrefixes = listOf("scroll ", "स्क्रॉल ")
+        scrollPrefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
+            val direction = normalized.removePrefix(prefix).trim().ifBlank { "down" }
+            return ParsedCommand(CommandType.ACCESSIBILITY_SCROLL, value = direction)
+        }
+
+        val messageSearchPrefixes = listOf(
+            "search messages for ",
+            "search messages ",
+            "find messages for ",
+            "find messages "
+        )
+        messageSearchPrefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
+            val search = normalized.removePrefix(prefix).trim()
+            if (search.isNotBlank()) {
+                return ParsedCommand(CommandType.ACCESSIBILITY_SEARCH_MESSAGES, value = search)
+            }
+        }
+
+        /*
+         * --------------------------------------------------------
          * WEB SEARCH
          * --------------------------------------------------------
          */
@@ -381,6 +516,42 @@ class DeviceActionManager(
         }
 
         /*
+         * Some speech recognizers drop the imperative word (for example,
+         * "open") and return only the app name. If the recognized text is
+         * exactly a known app alias, treat it as an app-open command too.
+         * This keeps voice app launching reliable without changing the
+         * existing command grammar.
+         */
+        val knownAppAliases = setOf(
+            "whatsapp",
+            "youtube",
+            "chrome",
+            "google chrome",
+            "gmail",
+            "google maps",
+            "maps",
+            "instagram",
+            "facebook",
+            "telegram",
+            "spotify",
+            "fc mobile",
+            "fcmobile",
+            "ea sports fc mobile",
+            "ea sports fc football mobile",
+            "fifa mobile",
+            "phone",
+            "dialer",
+            "camera"
+        )
+
+        if (knownAppAliases.contains(normalized)) {
+            return ParsedCommand(
+                type = CommandType.OPEN_APP,
+                value = normalized
+            )
+        }
+
+        /*
          * --------------------------------------------------------
          * CALL
          * --------------------------------------------------------
@@ -440,135 +611,61 @@ class DeviceActionManager(
                 "संदेश "
             )
 
-        for (
-        prefix in messagePrefixes
-        ) {
+        for (prefix in messagePrefixes) {
+            if (!normalized.startsWith(prefix)) continue
 
-            if (
-                normalized.startsWith(prefix)
-            ) {
+            val remainingRaw = rawQuery.substring(prefix.length).trim()
+            val remainingNormalized = normalize(remainingRaw)
+            if (remainingRaw.isBlank()) continue
 
-                val remaining =
-                    normalized
-                        .removePrefix(prefix)
-                        .trim()
+            // Preserve the user's original message text. The previous
+            // implementation normalized the entire command first, which
+            // silently lower-cased messages and removed punctuation.
+            val separatorPatterns = listOf(
+                " that says ",
+                " saying ",
+                ":",
+                " - ",
+                " that say "
+            )
 
-                if (
-                    remaining.isBlank()
-                ) {
-                    continue
-                }
+            val lowerRaw = remainingRaw.lowercase(Locale.ROOT)
+            val separator = separatorPatterns
+                .map { it to lowerRaw.indexOf(it.lowercase(Locale.ROOT)) }
+                .filter { it.second > 0 }
+                .minByOrNull { it.second }
 
-                val separators =
-                    listOf(
-                        " that says ",
-                        " saying ",
-                        ":",
-                        " - "
+            if (separator != null) {
+                val index = separator.second
+                val contact = remainingRaw.substring(0, index).trim()
+                val message = remainingRaw.substring(index + separator.first.length).trim()
+                if (contact.isNotBlank() && message.isNotBlank()) {
+                    return ParsedCommand(
+                        type = CommandType.MESSAGE,
+                        contactQuery = contact,
+                        message = message
                     )
-
-                for (
-                separator in separators
-                ) {
-
-                    val separatorIndex =
-                        remaining.indexOf(
-                            separator
-                        )
-
-                    if (
-                        separatorIndex > 0
-                    ) {
-
-                        val contact =
-                            remaining
-                                .substring(
-                                    0,
-                                    separatorIndex
-                                )
-                                .trim()
-
-                        val message =
-                            remaining
-                                .substring(
-                                    separatorIndex +
-                                            separator.length
-                                )
-                                .trim()
-
-                        if (
-                            contact.isNotBlank() &&
-                            message.isNotBlank()
-                        ) {
-
-                            return ParsedCommand(
-                                type =
-                                    CommandType.MESSAGE,
-                                contactQuery =
-                                    contact,
-                                message =
-                                    message
-                            )
-                        }
-                    }
                 }
-
-                /*
-                 * Supports:
-                 *
-                 * message hi to Mom
-                 * whatsapp hi to Mom
-                 */
-
-                val toIndex =
-                    remaining.lastIndexOf(
-                        " to "
-                    )
-
-                if (
-                    toIndex > 0 &&
-                    toIndex < remaining.length - 4
-                ) {
-
-                    val message =
-                        remaining
-                            .substring(
-                                0,
-                                toIndex
-                            )
-                            .trim()
-
-                    val contact =
-                        remaining
-                            .substring(
-                                toIndex + 4
-                            )
-                            .trim()
-
-                    if (
-                        contact.isNotBlank() &&
-                        message.isNotBlank()
-                    ) {
-
-                        return ParsedCommand(
-                            type =
-                                CommandType.MESSAGE,
-                            contactQuery =
-                                contact,
-                            message =
-                                message
-                        )
-                    }
-                }
-
-                return ParsedCommand(
-                    type =
-                        CommandType.MESSAGE,
-                    contactQuery =
-                        remaining,
-                    message = ""
-                )
             }
+
+            val toIndex = remainingNormalized.lastIndexOf(" to ")
+            if (toIndex > 0 && toIndex < remainingNormalized.length - 4) {
+                val message = remainingRaw.substring(0, toIndex).trim()
+                val contact = remainingRaw.substring(toIndex + 4).trim()
+                if (contact.isNotBlank() && message.isNotBlank()) {
+                    return ParsedCommand(
+                        type = CommandType.MESSAGE,
+                        contactQuery = contact,
+                        message = message
+                    )
+                }
+            }
+
+            return ParsedCommand(
+                type = CommandType.MESSAGE,
+                contactQuery = remainingRaw,
+                message = ""
+            )
         }
 
         return null
@@ -1292,7 +1389,38 @@ class DeviceActionManager(
          * --------------------------------------------------------
          * API 34+
          * --------------------------------------------------------
+         *
+         * The voice service is a background caller. Android 14/15 can
+         * still reject a PendingIntent with BAL_BLOCK even when the
+         * PendingIntent creator and sender both opt in.
+         *
+         * NEXUS EYE already has a user-enabled AccessibilityService,
+         * which is the existing system-mediated UI automation path in
+         * this app. Use it first so an app-open command does not depend
+         * on the foreground-service PendingIntent BAL decision.
          */
+
+        Log.d(
+            "NexusEyeDeviceAction",
+            "Trying external activity launch through AccessibilityService first"
+        )
+
+        if (
+            NexusEyeActionWorkflow.launchExternalActivity(intent)
+        ) {
+
+            Log.d(
+                "NexusEyeDeviceAction",
+                "External activity launch accepted through enabled AccessibilityService"
+            )
+
+            return
+        }
+
+        Log.w(
+            "NexusEyeDeviceAction",
+            "AccessibilityService launch unavailable; falling back to PendingIntent BAL path"
+        )
 
         val requestCode =
             (
@@ -1350,6 +1478,17 @@ class DeviceActionManager(
                 senderOptions.toBundle()
             )
 
+        } catch (securityException: SecurityException) {
+            /*
+             * A foreground service is still a background caller for Android's
+             * activity-launch rules. If the system rejects the PendingIntent,
+             * use the accessibility service only when the user has already
+             * enabled it. Otherwise rethrow so the caller reports a truthful
+             * failure instead of saying the app opened when it did not.
+             */
+            if (!NexusEyeActionWorkflow.launchExternalActivity(intent)) {
+                throw securityException
+            }
         } finally {
 
             pendingIntent.cancel()
@@ -1430,6 +1569,21 @@ class DeviceActionManager(
                 handled = true,
                 answer =
                     "I could not open that on this phone."
+            )
+        }
+    }
+
+    private fun accessibilityResult(
+        success: Boolean,
+        successMessage: String
+    ): Result {
+        return if (success) {
+            Result(true, successMessage)
+        } else {
+            Result(
+                handled = true,
+                answer =
+                    "I cannot control that part of the screen. Please make sure Nexus-Eye Accessibility access is enabled and the current app exposes its controls to Android."
             )
         }
     }

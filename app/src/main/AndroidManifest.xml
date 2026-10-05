@@ -1,142 +1,104 @@
-<?xml version="1.0" encoding="utf-8"?>
-
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- ========================================================= -->
-    <!-- MICROPHONE                                                 -->
-    <!-- ========================================================= -->
-
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
-    <!-- ========================================================= -->
-    <!-- FOREGROUND SERVICE                                         -->
-    <!-- ========================================================= -->
-
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-
-    <!-- Required because NexusEyeWakeWordService uses microphone -->
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-
-    <!-- ========================================================= -->
-    <!-- BLUETOOTH                                                  -->
-    <!-- ========================================================= -->
-
-    <!-- Android 12+ -->
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_CONNECT" />
-
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_SCAN" />
-
-    <!-- Android 11 and below -->
-    <uses-permission
-        android:name="android.permission.BLUETOOTH" />
-
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_ADMIN" />
-
-    <!-- ========================================================= -->
-    <!-- LOCATION                                                   -->
-    <!-- ========================================================= -->
-
-    <!-- Needed by some Bluetooth/location functionality on older
-         Android versions and depending on your existing BLE code. -->
-    <uses-permission
-        android:name="android.permission.ACCESS_FINE_LOCATION" />
-
-    <uses-permission
-        android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
-    <!-- ========================================================= -->
-    <!-- NOTIFICATIONS                                              -->
-    <!-- ========================================================= -->
-
-    <!-- Android 13+ -->
-    <uses-permission
-        android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- ========================================================= -->
-    <!-- ANDROID DIGITAL ASSISTANT                                  -->
-    <!-- ========================================================= -->
-
-    <uses-permission
-        android:name="android.permission.BIND_VOICE_INTERACTION" />
-
-    <!-- ========================================================= -->
-    <!-- APPLICATION                                                 -->
-    <!-- ========================================================= -->
-
-    <application
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="Nexus-Eye"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.NexusEye">
-
-        <!-- ===================================================== -->
-        <!-- MAIN ACTIVITY                                          -->
-        <!-- ===================================================== -->
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
+        <!--  Required on Android 11+ so SpeechRecognizer can discover the
+                     system RecognitionService.  -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+    </queries>
+    <!--   ============================================================
+                 CORE PERMISSIONS
+                 ============================================================   -->
+    <!--   Microphone for wake word + SpeechRecognizer   -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!--   Foreground service   -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!--   Foreground microphone service   -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <!--   Notifications for foreground service   -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!--   ============================================================
+                 BLUETOOTH
+                 ============================================================   -->
+    <!--   Android 12+ Bluetooth permissions   -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"/>
+    <!--   Older Android versions   -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+    <!--   ============================================================
+                 LOCATION
+                 ============================================================   -->
+    <!--   Used by Bluetooth/location-related functionality on
+                 older Android versions and existing navigation features   -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!--   ============================================================
+                 NETWORK
+                 ============================================================   -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!--   ============================================================
+                 NOTIFICATION ACCESS
+                 ============================================================   -->
+    <!--   Allows Android to bind the NotificationListenerService.
+                 This permission is normally granted by the system when
+                 the user enables Notification access in Settings.   -->
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"/>
+    <!--   ============================================================
+                 VOICE INTERACTION / DIGITAL ASSISTANT
+                 ============================================================   -->
+    <uses-permission android:name="android.permission.BIND_VOICE_INTERACTION"/>
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <uses-permission android:name="android.permission.CALL_PHONE"/>
+    <!--   ============================================================
+                 APPLICATION
+                 ============================================================   -->
+    <application android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:label="Nexus-Eye" android:roundIcon="@mipmap/ic_launcher_round" android:supportsRtl="true" android:theme="@style/Theme.NexusEye">
+        <!--   ========================================================
+                             MAIN ACTIVITY
+                             ========================================================   -->
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
-
-                <action
-                    android:name="android.intent.action.MAIN" />
-
-                <category
-                    android:name="android.intent.category.LAUNCHER" />
-
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-
         </activity>
-
-        <!-- ===================================================== -->
-        <!-- NEXUS-EYE DIGITAL ASSISTANT                            -->
-        <!-- ===================================================== -->
-
-        <service
-            android:name=".voice.NexusEyeVoiceInteractionService"
-            android:label="Nexus-Eye"
-            android:permission="android.permission.BIND_VOICE_INTERACTION"
-            android:exported="true">
-
+        <!--   ========================================================
+                             NEXUS-EYE WAKE WORD SERVICE
+                             ========================================================   -->
+        <service android:name=".voice.NexusEyeWakeWordService" android:enabled="true" android:exported="false" android:foregroundServiceType="microphone"/>
+        <!--   ========================================================
+                             NOTIFICATION LISTENER
+                             ========================================================   -->
+        <service android:name=".notification.NexusEyeNotificationListenerService" android:enabled="true" android:exported="true" android:label="Nexus-Eye" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
-
-                <action
-                    android:name="android.service.voice.VoiceInteractionService" />
-
+                <action android:name="android.service.notification.NotificationListenerService"/>
             </intent-filter>
-
-            <meta-data
-                android:name="android.voice_interaction"
-                android:resource="@xml/voice_interaction" />
-
         </service>
-
-        <!-- ===================================================== -->
-        <!-- DIGITAL ASSISTANT SESSION SERVICE                     -->
-        <!-- ===================================================== -->
-
-        <service
-            android:name=".voice.NexusEyeVoiceInteractionSessionService"
-            android:label="Nexus-Eye Voice Session"
-            android:permission="android.permission.BIND_VOICE_INTERACTION"
-            android:exported="false" />
-
-        <!-- ===================================================== -->
-        <!-- EXISTING ALWAYS-ON WAKE WORD SERVICE                  -->
-        <!-- ===================================================== -->
-
-        <service
-            android:name=".voice.NexusEyeWakeWordService"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
-
+        <!--   ========================================================
+                             ANDROID DIGITAL ASSISTANT
+                             ========================================================   -->
+        <service android:name=".voice.NexusEyeVoiceInteractionService" android:enabled="true" android:exported="true" android:label="Nexus-Eye" android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService"/>
+            </intent-filter>
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/voice_interaction"/>
+        </service>
+        <!--   ========================================================
+                             VOICE INTERACTION SESSION
+                             ========================================================   -->
+        <service android:name=".accessibility.NexusEyeAccessibilityService" android:enabled="true" android:exported="true" android:label="Nexus-Eye Accessibility" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config"/>
+        </service>
+        <service android:name=".voice.NexusEyeVoiceInteractionSessionService" android:enabled="true" android:exported="false" android:label="Nexus-Eye Voice Session" android:permission="android.permission.BIND_VOICE_INTERACTION"/>
     </application>
-
 </manifest>

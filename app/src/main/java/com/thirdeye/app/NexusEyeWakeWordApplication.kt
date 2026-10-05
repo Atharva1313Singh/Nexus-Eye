@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.thirdeye.app.voice.NexusEyeWakeWordService
+import com.thirdeye.app.voice.NexusEyeAssistantManager
 
 /**
  * Starts the Hey Nexus microphone foreground service whenever the app has a
@@ -60,6 +61,10 @@ class NexusEyeWakeWordApplication : Application() {
     }
 
     private fun startWakeWordServiceIfAllowed() {
+        if (NexusEyeAssistantManager.isAssistant(this)) {
+            return
+        }
+
         val microphoneGranted =
             ContextCompat.checkSelfPermission(
                 this,

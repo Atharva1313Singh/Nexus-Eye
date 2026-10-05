@@ -76,6 +76,150 @@ object NexusEyeActionWorkflow {
         scheduleWhatsAppProcessing()
     }
 
+    /**
+     * Attempts to launch an external activity through the already user-enabled
+     * accessibility service. This is only a fallback for Android background
+     * activity-launch restrictions; it does not enable or request accessibility.
+     */
+    fun launchExternalActivity(
+        intent: android.content.Intent
+    ): Boolean {
+        val service = synchronized(lock) { accessibilityService }
+
+        if (service == null) {
+            android.util.Log.w(
+                "NexusEyeActionWorkflow",
+                "External launch FAILED: AccessibilityService is not connected"
+            )
+            return false
+        }
+
+        return try {
+            val launchIntent = android.content.Intent(intent).apply {
+                addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                            android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                )
+            }
+
+            android.util.Log.d(
+                "NexusEyeActionWorkflow",
+                "Launching external activity through AccessibilityService: " +
+                        "package=${launchIntent.`package`}, " +
+                        "component=${launchIntent.component}, " +
+                        "action=${launchIntent.action}"
+            )
+
+            service.startActivity(launchIntent)
+
+            android.util.Log.d(
+                "NexusEyeActionWorkflow",
+                "AccessibilityService startActivity() completed"
+            )
+
+            true
+        } catch (throwable: Throwable) {
+            android.util.Log.e(
+                "NexusEyeActionWorkflow",
+                "AccessibilityService external launch FAILED",
+                throwable
+            )
+            false
+        }
+    }
+
+    /** Generic voice-driven accessibility primitives. These operate only
+     * through the user-enabled AccessibilityService and never attempt to
+     * obtain or bypass the service permission. */
+    fun accessibilityBack(): Boolean =
+        synchronized(lock) { accessibilityService?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) == true }
+
+    fun accessibilityHome(): Boolean =
+        synchronized(lock) { accessibilityService?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) == true }
+
+    fun accessibilityRecents(): Boolean =
+        synchronized(lock) { accessibilityService?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) == true }
+
+    fun accessibilityNotifications(): Boolean =
+        synchronized(lock) { accessibilityService?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS) == true }
+
+    fun accessibilityQuickSettings(): Boolean =
+        synchronized(lock) { accessibilityService?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS) == true }
+
+    fun accessibilityClick(target: String): Boolean {
+        val root = synchronized(lock) { accessibilityService?.rootInActiveWindow } ?: return false
+        val normalizedTarget = target.trim().lowercase(Locale.ROOT)
+        if (normalizedTarget.isBlank()) return false
+        val nodes = mutableListOf<AccessibilityNodeInfo>()
+        collectNodes(root, nodes)
+        val node = nodes.firstOrNull { n ->
+            val text = n.text?.toString()?.trim()?.lowercase(Locale.ROOT).orEmpty()
+            val description = n.contentDescription?.toString()?.trim()?.lowercase(Locale.ROOT).orEmpty()
+            text == normalizedTarget || description == normalizedTarget ||
+                    text.contains(normalizedTarget) || description.contains(normalizedTarget)
+        }
+        return performClick(node)
+    }
+
+    fun accessibilityType(text: String): Boolean {
+        val service = synchronized(lock) { accessibilityService } ?: return false
+        val root = service.rootInActiveWindow ?: return false
+        var focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        if (focused == null) {
+            val nodes = mutableListOf<AccessibilityNodeInfo>()
+            collectNodes(root, nodes)
+            focused = nodes.firstOrNull { it.isFocused && it.isEditable }
+        }
+        val node = focused ?: return false
+        val arguments = android.os.Bundle().apply {
+            putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                text
+            )
+        }
+        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+    }
+
+    fun accessibilityScroll(direction: String): Boolean {
+        val root = synchronized(lock) { accessibilityService?.rootInActiveWindow } ?: return false
+        val nodes = mutableListOf<AccessibilityNodeInfo>()
+        collectNodes(root, nodes)
+        val action = if (direction.equals("up", true) || direction.equals("back", true)) {
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        } else {
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        }
+        val scrollable = nodes.firstOrNull { it.isScrollable } ?: root
+        return scrollable.performAction(action)
+    }
+
+    fun accessibilityReadScreen(maxCharacters: Int = 3500): String {
+        val root = synchronized(lock) { accessibilityService?.rootInActiveWindow } ?: return ""
+        val nodes = mutableListOf<AccessibilityNodeInfo>()
+        collectNodes(root, nodes)
+        val parts = nodes.asSequence()
+            .mapNotNull { node ->
+                val value = node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                    ?: node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                value
+            }
+            .distinct()
+            .take(250)
+            .toList()
+        return parts.joinToString(". ").take(maxCharacters)
+    }
+
+    fun accessibilitySearchMessages(query: String): Boolean {
+        if (!accessibilityClick("search") &&
+            !accessibilityClick("search messages") &&
+            !accessibilityClick("search chats")
+        ) {
+            return false
+        }
+        handler.postDelayed({ accessibilityType(query) }, 300L)
+        return true
+    }
+
     fun detachAccessibilityService(
         service: AccessibilityService
     ) {

@@ -220,6 +220,14 @@ fun SettingsScreen(
         mutableStateOf(initialApiCredentialState.geminiApiKeyConfigured)
     }
 
+    var onlineNavigationApiKeyInput by remember {
+        mutableStateOf("")
+    }
+
+    var onlineNavigationApiKeyConfigured by remember {
+        mutableStateOf(initialApiCredentialState.onlineNavigationApiKeyConfigured)
+    }
+
     var offlinePackagedEntryCount by remember {
         mutableStateOf(initialOfflineDataStats.packagedEntryCount)
     }
@@ -725,6 +733,40 @@ fun SettingsScreen(
                     }
             )
         }
+    }
+
+    fun saveOnlineNavigationApiSettings() {
+        val cleanKey = onlineNavigationApiKeyInput.trim()
+        if (cleanKey.isNotBlank()) {
+            apiCredentialStore.saveOnlineNavigationApiKey(cleanKey)
+            onlineNavigationApiKeyInput = ""
+            onlineNavigationApiKeyConfigured = true
+            statusMessage = "OpenRouteService map API key saved securely."
+            speakConfirmation(
+                ttsManager = ttsManager,
+                language = selectedSpeechLanguage,
+                text = "OpenRouteService map API key saved securely."
+            )
+        } else {
+            onlineNavigationApiKeyConfigured = apiCredentialStore.hasOnlineNavigationApiKey()
+            statusMessage = if (onlineNavigationApiKeyConfigured) {
+                "OpenRouteService map API key is already configured."
+            } else {
+                "No OpenRouteService map API key was entered."
+            }
+        }
+    }
+
+    fun clearOnlineNavigationApiKey() {
+        apiCredentialStore.clearOnlineNavigationApiKey()
+        onlineNavigationApiKeyInput = ""
+        onlineNavigationApiKeyConfigured = false
+        statusMessage = "OpenRouteService map API key removed."
+        speakConfirmation(
+            ttsManager = ttsManager,
+            language = selectedSpeechLanguage,
+            text = "OpenRouteService map API key has been removed."
+        )
     }
 
     fun clearApiKey() {
@@ -1554,6 +1596,49 @@ fun SettingsScreen(
                 style =
                     MaterialTheme.typography.bodySmall
             )
+
+            Text(
+                text = "Map & Online Navigation API",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Text(
+                text = if (onlineNavigationApiKeyConfigured) {
+                    "OpenRouteService API key: Configured"
+                } else {
+                    "OpenRouteService API key: Not configured"
+                },
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            Text(
+                text = "This is the existing online map/route API used by NEXUS EYE. The key is stored in protected Android Keystore-backed storage.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            OutlinedTextField(
+                value = onlineNavigationApiKeyInput,
+                onValueChange = { onlineNavigationApiKeyInput = it },
+                label = { Text("OpenRouteService API key") },
+                placeholder = { Text("Enter a new map API key") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Button(
+                onClick = { saveOnlineNavigationApiSettings() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("SAVE MAP API KEY SECURELY")
+            }
+
+            OutlinedButton(
+                onClick = { clearOnlineNavigationApiKey() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("REMOVE MAP API KEY")
+            }
 
             Text(
                 text = "Offline Data Management",
@@ -2630,13 +2715,28 @@ private suspend fun obtainCurrentLocation(
                     cancellationTokenSource.token
                 )
                 .addOnSuccessListener { location ->
-                    if (continuation.isActive) {
+                    if (!continuation.isActive) return@addOnSuccessListener
+                    if (location != null) {
                         continuation.resume(location)
+                    } else {
+                        locationClient.lastLocation
+                            .addOnSuccessListener { lastLocation ->
+                                if (continuation.isActive) continuation.resume(lastLocation)
+                            }
+                            .addOnFailureListener {
+                                if (continuation.isActive) continuation.resume(null)
+                            }
                     }
                 }
                 .addOnFailureListener {
                     if (continuation.isActive) {
-                        continuation.resume(null)
+                        locationClient.lastLocation
+                            .addOnSuccessListener { lastLocation ->
+                                if (continuation.isActive) continuation.resume(lastLocation)
+                            }
+                            .addOnFailureListener {
+                                if (continuation.isActive) continuation.resume(null)
+                            }
                     }
                 }
 

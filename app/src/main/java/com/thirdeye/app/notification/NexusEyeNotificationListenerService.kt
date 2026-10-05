@@ -12,34 +12,29 @@ class NexusEyeNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-
-        Log.d(TAG, "NEXUS EYE Notification Access connected")
-    }
-
-    override fun onNotificationPosted(
-        sbn: StatusBarNotification
-    ) {
-        Log.d(
-            TAG,
-            "Notification posted: ${sbn.packageName}"
-        )
-    }
-
-    override fun onNotificationRemoved(
-        sbn: StatusBarNotification
-    ) {
-        Log.d(
-            TAG,
-            "Notification removed: ${sbn.packageName}"
-        )
+        Log.d(TAG, "Notification listener connected")
     }
 
     override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.d(TAG, "Notification listener disconnected")
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        super.onNotificationPosted(sbn)
+
         Log.d(
             TAG,
-            "NEXUS EYE Notification Access disconnected"
+            "Notification received from: ${sbn.packageName}"
         )
+    }
 
-        super.onListenerDisconnected()
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        super.onNotificationRemoved(sbn)
+
+        Log.d(
+            TAG,
+            "Notification removed from: ${sbn.packageName}"
+        )
     }
 }

@@ -2,6 +2,7 @@ package com.thirdeye.app.voice
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -17,17 +18,7 @@ class NexusEyeSpeechRecognizer(
         context.applicationContext
 
     private val speechRecognizer: SpeechRecognizer? =
-        if (
-            SpeechRecognizer.isRecognitionAvailable(
-                appContext
-            )
-        ) {
-            SpeechRecognizer.createSpeechRecognizer(
-                appContext
-            )
-        } else {
-            null
-        }
+        createRecognizer()
 
     private var listening = false
 
@@ -179,6 +170,30 @@ class NexusEyeSpeechRecognizer(
         )
     }
 
+    private fun createRecognizer(): SpeechRecognizer? {
+        if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
+            return null
+        }
+
+        // Prefer the local recognizer when available. This improves privacy,
+        // reduces network-related ERROR_NETWORK failures, and is better suited
+        // to a voice-first accessibility workflow. Fall back to the system
+        // recognizer because some OEMs do not ship an on-device model.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(appContext)
+        ) {
+            return try {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(appContext)
+            } catch (_: UnsupportedOperationException) {
+                SpeechRecognizer.createSpeechRecognizer(appContext)
+            } catch (_: Exception) {
+                SpeechRecognizer.createSpeechRecognizer(appContext)
+            }
+        }
+
+        return SpeechRecognizer.createSpeechRecognizer(appContext)
+    }
+
     fun startListening(
         language: NexusEyeLanguage,
         onPartialResult: (String) -> Unit = {},
@@ -244,8 +259,31 @@ class NexusEyeSpeechRecognizer(
 
                 putExtra(
                     RecognizerIntent.EXTRA_MAX_RESULTS,
-                    3
+                    5
                 )
+
+                // Reduce false recognition drift toward unrelated words when
+                // the device recognizer supports contextual biasing.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    putExtra(
+                        RecognizerIntent.EXTRA_ENABLE_BIASING_DEVICE_CONTEXT,
+                        true
+                    )
+                }
+
+                // Android 14+ recognizers can detect/switch language when the
+                // installed models support it. Keep this optional so older or
+                // vendor recognizers simply ignore the extras.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    putExtra(
+                        RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION,
+                        true
+                    )
+                    putExtra(
+                        RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH,
+                        RecognizerIntent.LANGUAGE_SWITCH_BALANCED
+                    )
+                }
             }
 
         try {

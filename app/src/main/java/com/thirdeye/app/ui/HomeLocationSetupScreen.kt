@@ -602,9 +602,17 @@ private suspend fun detectCurrentLocation(
                 )
                 .addOnSuccessListener { location ->
 
-                    continuation.resume(
-                        location
-                    )
+                    if (location != null) {
+                        continuation.resume(location)
+                    } else {
+                        fusedLocationClient.lastLocation
+                            .addOnSuccessListener { lastLocation ->
+                                continuation.resume(lastLocation)
+                            }
+                            .addOnFailureListener {
+                                continuation.resume(null)
+                            }
+                    }
                 }
                 .addOnFailureListener {
 

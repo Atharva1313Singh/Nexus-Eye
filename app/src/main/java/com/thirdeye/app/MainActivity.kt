@@ -2,6 +2,7 @@ package com.thirdeye.app
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,11 +42,13 @@ import com.thirdeye.app.ui.HomeScreen
 import com.thirdeye.app.ui.IntelligenceScreen
 import com.thirdeye.app.ui.NavigationScreen
 import com.thirdeye.app.ui.NotificationAccessSetupScreen
+import com.thirdeye.app.ui.OnlineNavigationApiSetupScreen
 import com.thirdeye.app.ui.SettingsScreen
 import com.thirdeye.app.ui.SetupRoleScreen
 import com.thirdeye.app.ui.VisionScreen
 import com.thirdeye.app.ui.VoiceScreen
 import com.thirdeye.app.ui.WeatherScreen
+import com.thirdeye.app.voice.NexusEyeAssistantManager
 import kotlinx.coroutines.launch
 
 class MainActivity :
@@ -200,6 +203,13 @@ class MainActivity :
             )
         }
 
+        var onlineNavigationApiSetupComplete by
+        remember {
+            mutableStateOf(
+                apiCredentialStore.hasOnlineNavigationApiKey()
+            )
+        }
+
         var pendingNavigationDestination by
         remember {
 
@@ -208,21 +218,125 @@ class MainActivity :
             )
         }
 
+        var assistantPrompted by remember { mutableStateOf(false) }
+        var assistantSetupAttempted by remember { mutableStateOf(false) }
+
+        val assistantRoleLauncher =
+            rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) {
+                // The role decision is made by Android. Whether accepted or
+                // declined, continue with the normal app setup flow.
+                assistantSetupAttempted = true
+            }
+
+        val voicePermissionsLauncher =
+            rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                if (permissions[Manifest.permission.RECORD_AUDIO] == true ||
+                    ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    startWakeWordService()
+                }
+
+                if (role == SetupRole.BLIND_USER &&
+                    !NexusEyeAssistantManager.isAccessibilityEnabled(this@MainActivity)
+                ) {
+                    try {
+                        NexusEyeAssistantManager.openAccessibilitySettings(this@MainActivity)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+
         val wakeWordMicrophonePermissionLauncher =
             rememberLauncherForActivityResult(
-                contract =
-                    ActivityResultContracts.RequestPermission()
+                contract = ActivityResultContracts.RequestPermission()
             ) { granted ->
                 if (granted) {
                     startWakeWordService()
                 }
             }
 
+        LaunchedEffect(setupComplete, role) {
+            if (setupComplete &&
+                role == SetupRole.BLIND_USER &&
+                !assistantPrompted
+            ) {
+                assistantPrompted = true
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val roleIntent =
+                        NexusEyeAssistantManager.createAssistantRoleRequest(
+                            this@MainActivity
+                        )
+                    if (roleIntent != null) {
+                        try {
+                            assistantRoleLauncher.launch(roleIntent)
+                        } catch (_: Exception) {
+                            // The user can still select Nexus-Eye manually in
+                            // Android's Assistant settings.
+                            assistantSetupAttempted = true
+                        }
+                    } else {
+                        assistantSetupAttempted = true
+                        if (!NexusEyeAssistantManager.isAccessibilityEnabled(this@MainActivity)) {
+                            try {
+                                NexusEyeAssistantManager.openAccessibilitySettings(this@MainActivity)
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
+                } else {
+                    assistantSetupAttempted = true
+                    if (!NexusEyeAssistantManager.isAccessibilityEnabled(this@MainActivity)) {
+                        try {
+                            NexusEyeAssistantManager.openAccessibilitySettings(this@MainActivity)
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+            }
+        }
+
+        LaunchedEffect(setupComplete, role, assistantSetupAttempted) {
+            if (setupComplete && role == SetupRole.BLIND_USER && assistantSetupAttempted) {
+                val permissions = buildList {
+                    add(Manifest.permission.RECORD_AUDIO)
+                    add(Manifest.permission.READ_CONTACTS)
+                    add(Manifest.permission.CALL_PHONE)
+                    add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        add(Manifest.permission.BLUETOOTH_SCAN)
+                        add(Manifest.permission.BLUETOOTH_CONNECT)
+                        add(Manifest.permission.BLUETOOTH_ADVERTISE)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }.distinct().filter { permission ->
+                    ContextCompat.checkSelfPermission(
+                        this@MainActivity, permission
+                    ) != PackageManager.PERMISSION_GRANTED
+                }
+
+                if (permissions.isNotEmpty()) {
+                    voicePermissionsLauncher.launch(permissions.toTypedArray())
+                }
+            }
+        }
+
         LaunchedEffect(
             setupComplete,
-            notificationAccessComplete
+            notificationAccessComplete,
+            role
         ) {
-            if (setupComplete && notificationAccessComplete) {
+            if (setupComplete && notificationAccessComplete && role != SetupRole.BLIND_USER) {
                 val microphoneGranted =
                     ContextCompat.checkSelfPermission(
                         this@MainActivity,
@@ -429,6 +543,16 @@ class MainActivity :
                             apiSetupComplete =
                                 apiCredentialStore
                                     .hasGeminiApiKey()
+                        }
+                    )
+                }
+
+                !onlineNavigationApiSetupComplete -> {
+
+                    OnlineNavigationApiSetupScreen(
+                        onComplete = {
+                            onlineNavigationApiSetupComplete =
+                                apiCredentialStore.hasOnlineNavigationApiKey()
                         }
                     )
                 }
@@ -733,6 +857,12 @@ class MainActivity :
     }
 
     private fun startWakeWordService() {
+        // When Nexus-Eye is the system assistant, VoiceInteractionService owns
+        // hotword microphone capture. Do not start a second microphone FGS.
+        if (NexusEyeAssistantManager.isAssistant(this)) {
+            return
+        }
+
         try {
             val intent =
                 android.content.Intent(
