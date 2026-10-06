@@ -167,35 +167,51 @@ class NexusEyeTtsManager(
                 language
             )
 
-        val languageResult =
+        var languageResult =
             try {
-
-                textToSpeech?.setLanguage(
-                    locale
-                )
-
+                textToSpeech?.setLanguage(locale)
             } catch (_: Exception) {
-
                 null
             }
 
-        val supported =
+        var selectedLocale = locale
+
+        // Some Android TTS engines do not advertise regional variants such as
+        // en-IN/hi-IN even though they can speak the base language. Try the
+        // language-only locale before declaring TTS unavailable.
+        val exactSupported =
             languageResult != null &&
-                    languageResult !=
-                    TextToSpeech.LANG_MISSING_DATA &&
-                    languageResult !=
-                    TextToSpeech.LANG_NOT_SUPPORTED
+                    languageResult != TextToSpeech.LANG_MISSING_DATA &&
+                    languageResult != TextToSpeech.LANG_NOT_SUPPORTED
 
-        if (
-            !supported
-        ) {
+        if (!exactSupported) {
+            val baseLocale = Locale(locale.language)
+            if (baseLocale.language != locale.language || baseLocale == locale) {
+                return false
+            }
 
-            return false
+            languageResult =
+                try {
+                    textToSpeech?.setLanguage(baseLocale)
+                } catch (_: Exception) {
+                    null
+                }
+
+            val baseSupported =
+                languageResult != null &&
+                        languageResult != TextToSpeech.LANG_MISSING_DATA &&
+                        languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+
+            if (!baseSupported) {
+                return false
+            }
+
+            selectedLocale = baseLocale
         }
 
         val femaleVoice =
             findBestFemaleVoice(
-                locale
+                selectedLocale
             )
 
         if (

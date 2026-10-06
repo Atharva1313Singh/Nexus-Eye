@@ -68,6 +68,16 @@ class NexusEyeWakeWordService : Service() {
     private var destroyed = false
     private var speechErrorStreak = 0
 
+    // Wake confirmation state. A single model spike must never wake the app.
+    private var wakeHighScoreCount = 0
+    private var wakeLastHighScoreAt = 0L
+    private var wakePeakScore = 0f
+
+    // Some Android devices expose an on-device recognizer but do not have the
+    // requested language pack installed. We fall back to the system recognizer
+    // once before abandoning the command capture.
+    private var languageUnavailableFallbackAttempted = false
+
     private val restartRunnable = Runnable {
         if (!destroyed && !commandProcessing) {
             Log.i(TAG, "Restart runnable -> starting wake listening")
@@ -215,6 +225,13 @@ class NexusEyeWakeWordService : Service() {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * Initializes the OpenWakeWord detector.
+     *
+     * This method intentionally logs the complete initialization path.
+     * Previously all exceptions were silently swallowed, making it
+     * impossible to know whether hey_nexus.onnx was actually loading.
+     */
     private fun initializeWakeWordDetector() {
 
         Log.i(
@@ -243,11 +260,6 @@ class NexusEyeWakeWordService : Service() {
         )
 
         try {
-            /*
-             * IMPORTANT:
-             * OpenWakeWord in this project does NOT expose release().
-             * Only stop() is used here.
-             */
             wakeWordDetector?.stop()
 
             Log.i(
@@ -257,7 +269,7 @@ class NexusEyeWakeWordService : Service() {
         } catch (e: Exception) {
             Log.w(
                 TAG,
-                "Error stopping previous detector",
+                "Error releasing previous detector",
                 e
             )
         }
@@ -294,9 +306,7 @@ class NexusEyeWakeWordService : Service() {
 
             Log.i(
                 TAG,
-                "Detector object is ${
-                    if (wakeWordDetector != null) "NOT NULL" else "NULL"
-                }"
+                "Detector object is ${if (wakeWordDetector != null) "NOT NULL" else "NULL"}"
             )
 
         } catch (e: Exception) {
@@ -407,6 +417,9 @@ class NexusEyeWakeWordService : Service() {
         }
 
         wakeDetectionHandled = false
+        wakeHighScoreCount = 0
+        wakeLastHighScoreAt = 0L
+        wakePeakScore = 0f
         listeningForWakeWord = true
 
         Log.i(
@@ -434,6 +447,11 @@ class NexusEyeWakeWordService : Service() {
                     return@start
                 }
 
+                /*
+                 * Log the score only when it is useful for diagnostics.
+                 * A low threshold can generate many callbacks, so we don't
+                 * want to flood Logcat with every low-level score.
+                 */
                 if (score >= SCORE_LOG_THRESHOLD) {
                     Log.i(
                         TAG,
@@ -441,44 +459,66 @@ class NexusEyeWakeWordService : Service() {
                     )
                 }
 
-                /*
-                 * IMPORTANT:
-                 *
-                 * Only scores >= 0.50 are accepted as "Hey Nexus".
-                 *
-                 * Your previous threshold was 0.06, which meant scores such
-                 * as 0.1079, 0.1853 and 0.2539 could activate the assistant.
-                 */
+                // Require several consecutive high-confidence model frames.
+                // This rejects isolated score spikes, which were responsible
+                // for the previous fake "Hey Nexus" activations.
+                val now = System.currentTimeMillis()
+
                 if (score >= WAKE_WORD_THRESHOLD) {
+                    if (wakeLastHighScoreAt == 0L ||
+                        now - wakeLastHighScoreAt > WAKE_CONFIRMATION_MAX_GAP_MS
+                    ) {
+                        wakeHighScoreCount = 0
+                        wakePeakScore = 0f
+                    }
 
-                    wakeDetectionHandled = true
-
-                    Log.i(
-                        TAG,
-                        "========================================"
-                    )
-
-                    Log.i(
-                        TAG,
-                        "HEY NEXUS DETECTED"
-                    )
+                    wakeHighScoreCount++
+                    wakeLastHighScoreAt = now
+                    wakePeakScore = maxOf(wakePeakScore, score)
 
                     Log.i(
                         TAG,
-                        "Wake score=$score"
+                        "Wake candidate: score=$score, " +
+                                "count=$wakeHighScoreCount/$WAKE_CONFIRMATION_FRAMES, " +
+                                "peak=$wakePeakScore"
                     )
 
-                    Log.i(
-                        TAG,
-                        "Stopping wake detector for microphone handoff"
-                    )
+                    if (wakeHighScoreCount >= WAKE_CONFIRMATION_FRAMES &&
+                        wakePeakScore >= WAKE_CONFIRMATION_PEAK_THRESHOLD
+                    ) {
+                        wakeDetectionHandled = true
 
-                    Log.i(
-                        TAG,
-                        "========================================"
-                    )
+                        Log.i(
+                            TAG,
+                            "========================================"
+                        )
 
-                    handleWakeWordDetected(score)
+                        Log.i(
+                            TAG,
+                            "🔥 HEY NEXUS DETECTED"
+                        )
+
+                        Log.i(
+                            TAG,
+                            "Wake score=$score, peak=$wakePeakScore"
+                        )
+
+                        Log.i(
+                            TAG,
+                            "Stopping wake detector for microphone handoff"
+                        )
+
+                        Log.i(
+                            TAG,
+                            "========================================"
+                        )
+
+                        handleWakeWordDetected(wakePeakScore)
+                    }
+                } else {
+                    wakeHighScoreCount = 0
+                    wakeLastHighScoreAt = 0L
+                    wakePeakScore = 0f
                 }
             }
 
@@ -505,6 +545,9 @@ class NexusEyeWakeWordService : Service() {
 
             listeningForWakeWord = false
             wakeDetectionHandled = false
+            wakeHighScoreCount = 0
+            wakeLastHighScoreAt = 0L
+            wakePeakScore = 0f
 
             scheduleWakeRestart(
                 WAKE_DETECTOR_RETRY_MS
@@ -523,6 +566,8 @@ class NexusEyeWakeWordService : Service() {
 
         /*
          * Stop openWakeWord BEFORE creating SpeechRecognizer.
+         * This is the critical microphone handoff that prevents both
+         * engines from racing over AudioRecord.
          */
         listeningForWakeWord = false
 
@@ -550,18 +595,14 @@ class NexusEyeWakeWordService : Service() {
     }
 
     /**
-     * This is called ONLY after a score passes WAKE_WORD_THRESHOLD.
-     *
-     * Therefore "I am listening" is NOT spoken while the service is
-     * simply waiting for Hey Nexus.
+     * Give the user an immediate audible confirmation that Hey Nexus was
+     * actually detected. The command recognizer starts only after the short
+     * acknowledgement finishes, so it cannot accidentally transcribe the
+     * acknowledgement itself as the user's command.
      */
     private fun acknowledgeWakeWordAndStartCommandListening() {
-
         if (destroyed || !hasMicrophonePermission()) {
-            Log.w(
-                TAG,
-                "Wake acknowledgement skipped: service unavailable"
-            )
+            Log.w(TAG, "Wake acknowledgement skipped: service unavailable")
             return
         }
 
@@ -570,95 +611,45 @@ class NexusEyeWakeWordService : Service() {
                 .getCurrentState()
                 .speechLanguage
 
-        if (!ttsManager.setLanguage(speechLanguage)) {
-
-            Log.w(
-                TAG,
-                "Wake acknowledgement TTS language unavailable; " +
-                        "starting command listening"
-            )
-
-            mainHandler.postDelayed(
-                {
-                    if (!destroyed) {
-                        startCommandListening()
-                    }
-                },
-                MICROPHONE_HANDOFF_DELAY_MS
-            )
-
-            return
-        }
-
         try {
+            // IMPORTANT: do not gate the wake acknowledgement on setLanguage().
+            // The TTS manager already receives the speechLanguage below. On some
+            // devices setLanguage() can report false even though phone TTS is
+            // perfectly able to speak, which previously caused a real wake to
+            // produce no "I am listening" acknowledgement at all.
+            Log.i(TAG, "Starting wake acknowledgement TTS")
 
             ttsManager.speakOnPhoneFallback(
                 text = "I am listening.",
                 language = speechLanguage,
-
                 onComplete = {
-
-                    if (!destroyed &&
-                        !commandProcessing &&
-                        hasMicrophonePermission()
-                    ) {
-
+                    if (!destroyed && !commandProcessing && hasMicrophonePermission()) {
                         mainHandler.postDelayed(
-                            {
-                                if (!destroyed) {
-                                    startCommandListening()
-                                }
-                            },
+                            { if (!destroyed) startCommandListening() },
                             MICROPHONE_HANDOFF_DELAY_MS
                         )
                     }
                 },
-
                 onError = { error ->
-
-                    Log.w(
-                        TAG,
-                        "Wake acknowledgement failed: $error"
-                    )
-
-                    if (!destroyed &&
-                        !commandProcessing &&
-                        hasMicrophonePermission()
-                    ) {
-
+                    Log.w(TAG, "Wake acknowledgement failed: $error")
+                    if (!destroyed && !commandProcessing && hasMicrophonePermission()) {
                         mainHandler.postDelayed(
-                            {
-                                if (!destroyed) {
-                                    startCommandListening()
-                                }
-                            },
+                            { if (!destroyed) startCommandListening() },
                             MICROPHONE_HANDOFF_DELAY_MS
                         )
                     }
                 }
             )
-
         } catch (e: Exception) {
-
-            Log.w(
-                TAG,
-                "Wake acknowledgement exception; " +
-                        "starting command listening",
-                e
-            )
-
+            Log.w(TAG, "Wake acknowledgement exception; starting command listening", e)
             mainHandler.postDelayed(
-                {
-                    if (!destroyed) {
-                        startCommandListening()
-                    }
-                },
+                { if (!destroyed) startCommandListening() },
                 MICROPHONE_HANDOFF_DELAY_MS
             )
         }
     }
 
-    private fun startCommandListening() {
+    private fun startCommandListening(forceSystemRecognizer: Boolean = false) {
 
         Log.i(
             TAG,
@@ -689,11 +680,18 @@ class NexusEyeWakeWordService : Service() {
             return
         }
 
+        if (!forceSystemRecognizer) {
+            languageUnavailableFallbackAttempted = false
+        }
+
         listeningForWakeWord = false
-        listeningForCommand = true
         lastPartialCommand = ""
 
+        // Cancel any stale recognizer BEFORE marking the new command session
+        // active. destroyRecognizerOnly() intentionally sets the command state
+        // to false, so the order here is important.
         destroyRecognizerOnly()
+        listeningForCommand = true
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
 
@@ -719,7 +717,9 @@ class NexusEyeWakeWordService : Service() {
                     "Creating SpeechRecognizer"
                 )
 
-                createSpeechRecognizer()
+                createSpeechRecognizer(
+                    forceSystemRecognizer = forceSystemRecognizer
+                )
 
             } catch (e: Exception) {
 
@@ -746,7 +746,6 @@ class NexusEyeWakeWordService : Service() {
                 override fun onReadyForSpeech(
                     params: Bundle?
                 ) {
-
                     Log.i(
                         TAG,
                         "SpeechRecognizer: onReadyForSpeech"
@@ -754,7 +753,6 @@ class NexusEyeWakeWordService : Service() {
                 }
 
                 override fun onBeginningOfSpeech() {
-
                     Log.i(
                         TAG,
                         "SpeechRecognizer: onBeginningOfSpeech"
@@ -763,14 +761,20 @@ class NexusEyeWakeWordService : Service() {
 
                 override fun onRmsChanged(
                     rmsdB: Float
-                ) = Unit
+                ) {
+                    if (rmsdB > -45f) {
+                        Log.d(
+                            TAG,
+                            "SpeechRecognizer: RMS=$rmsdB dB"
+                        )
+                    }
+                }
 
                 override fun onBufferReceived(
                     buffer: ByteArray?
                 ) = Unit
 
                 override fun onEndOfSpeech() {
-
                     Log.i(
                         TAG,
                         "SpeechRecognizer: onEndOfSpeech"
@@ -783,31 +787,50 @@ class NexusEyeWakeWordService : Service() {
 
                     Log.e(
                         TAG,
-                        "SpeechRecognizer: onError=$error, " +
-                                "lastPartial='$lastPartialCommand'"
+                        "SpeechRecognizer: onError=$error, lastPartial='$lastPartialCommand'"
                     )
 
                     listeningForCommand = false
+                    speechErrorStreak = (speechErrorStreak + 1).coerceAtMost(6)
 
-                    speechErrorStreak =
-                        (speechErrorStreak + 1)
-                            .coerceAtMost(6)
-
-                    /*
-                     * Never execute a partial transcript after an error.
-                     */
+                    // Never execute an incomplete partial transcript after a
+                    // failed recognition session. A partial such as "call" or
+                    // "send" can be dangerous if turned into an action.
                     destroyRecognizerOnly()
 
-                    /*
-                     * Silently return to wake-word listening.
-                     *
-                     * No "I am listening" is spoken here.
-                     */
+                    // ERROR_LANGUAGE_UNAVAILABLE is common when the on-device
+                    // recognizer exists but its requested language pack is not
+                    // installed. Retry once using Android's normal recognizer
+                    // instead of immediately returning to wake mode.
+                    if (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE &&
+                        !forceSystemRecognizer &&
+                        !languageUnavailableFallbackAttempted &&
+                        !destroyed &&
+                        !commandProcessing
+                    ) {
+                        languageUnavailableFallbackAttempted = true
+
+                        Log.w(
+                            TAG,
+                            "On-device language unavailable -> retrying with system SpeechRecognizer"
+                        )
+
+                        mainHandler.postDelayed(
+                            {
+                                if (!destroyed && !commandProcessing) {
+                                    startCommandListening(
+                                        forceSystemRecognizer = true
+                                    )
+                                }
+                            },
+                            SPEECH_RECOGNIZER_FALLBACK_DELAY_MS
+                        )
+
+                        return
+                    }
+
                     if (!commandProcessing) {
-
-                        val delay =
-                            commandRetryDelayMs(error)
-
+                        val delay = commandRetryDelayMs(error)
                         scheduleWakeRestart(delay)
                     }
                 }
@@ -832,6 +855,7 @@ class NexusEyeWakeWordService : Service() {
 
                     listeningForCommand = false
                     speechErrorStreak = 0
+                    languageUnavailableFallbackAttempted = false
 
                     destroyRecognizerOnly()
 
@@ -855,7 +879,6 @@ class NexusEyeWakeWordService : Service() {
                 override fun onPartialResults(
                     partialResults: Bundle?
                 ) {
-
                     val partialText =
                         partialResults
                             ?.getStringArrayList(
@@ -866,10 +889,7 @@ class NexusEyeWakeWordService : Service() {
                             .orEmpty()
 
                     if (partialText.isNotBlank()) {
-
-                        lastPartialCommand =
-                            partialText
-
+                        lastPartialCommand = partialText
                         Log.d(
                             TAG,
                             "SpeechRecognizer partial='$partialText'"
@@ -889,14 +909,14 @@ class NexusEyeWakeWordService : Service() {
                 .getCurrentState()
                 .speechLanguage
 
+        // Android recognizers are more reliable with a concrete locale than
+        // a bare language code such as "en".
         val languageTag =
-            if (speechLanguage.id == "hi") {
-
-                "hi-IN"
-
-            } else {
-
-                Locale.forLanguageTag(
+            when (speechLanguage.id.lowercase(Locale.ROOT)) {
+                "hi", "hi-in" -> "hi-IN"
+                "en", "en-in" -> "en-IN"
+                "en-us" -> "en-US"
+                else -> Locale.forLanguageTag(
                     speechLanguage.id
                 )
                     .toLanguageTag()
@@ -954,7 +974,6 @@ class NexusEyeWakeWordService : Service() {
                 )
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-
                     putExtra(
                         RecognizerIntent.EXTRA_ENABLE_BIASING_DEVICE_CONTEXT,
                         true
@@ -962,12 +981,10 @@ class NexusEyeWakeWordService : Service() {
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-
                     putExtra(
                         RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION,
                         true
                     )
-
                     putExtra(
                         RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH,
                         RecognizerIntent.LANGUAGE_SWITCH_BALANCED
@@ -977,9 +994,23 @@ class NexusEyeWakeWordService : Service() {
 
         try {
 
+            // Explicitly release phone TTS before Android acquires the
+            // microphone. Some OEM audio stacks report onReadyForSpeech
+            // while the previous TTS route is still settling, producing
+            // ERROR_NO_MATCH without ever delivering onBeginningOfSpeech.
+            try {
+                ttsManager.stop()
+            } catch (ttsError: Exception) {
+                Log.w(
+                    TAG,
+                    "Could not stop TTS before microphone acquisition",
+                    ttsError
+                )
+            }
+
             Log.i(
                 TAG,
-                "Starting SpeechRecognizer microphone..."
+                "Starting SpeechRecognizer microphone after TTS/audio handoff..."
             )
 
             recognizer.startListening(intent)
@@ -1208,80 +1239,46 @@ class NexusEyeWakeWordService : Service() {
         }
     }
 
-    private fun createSpeechRecognizer(): SpeechRecognizer {
-
+    private fun createSpeechRecognizer(
+        forceSystemRecognizer: Boolean = false
+    ): SpeechRecognizer {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-
-            throw IllegalStateException(
-                "No Android speech recognition service is available"
-            )
+            throw IllegalStateException("No Android speech recognition service is available")
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+        if (!forceSystemRecognizer &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
         ) {
-
             try {
-
-                Log.i(
-                    TAG,
-                    "Using on-device SpeechRecognizer"
-                )
-
-                return SpeechRecognizer
-                    .createOnDeviceSpeechRecognizer(this)
-
+                Log.i(TAG, "Using on-device SpeechRecognizer")
+                return SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
             } catch (e: Exception) {
-
-                Log.w(
-                    TAG,
-                    "On-device SpeechRecognizer unavailable; " +
-                            "using system recognizer",
-                    e
-                )
+                Log.w(TAG, "On-device SpeechRecognizer unavailable; using system recognizer", e)
             }
         }
 
-        Log.i(
-            TAG,
-            "Using system SpeechRecognizer"
-        )
+        if (forceSystemRecognizer) {
+            Log.i(TAG, "Using system SpeechRecognizer after on-device language fallback")
+        } else {
+            Log.i(TAG, "Using system SpeechRecognizer")
+        }
 
         return SpeechRecognizer.createSpeechRecognizer(this)
     }
 
-    private fun commandRetryDelayMs(
-        error: Int
-    ): Long {
-
-        val base =
-            when (error) {
-
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
-                SpeechRecognizer.ERROR_CLIENT,
-                SpeechRecognizer.ERROR_SERVER ->
-                    500L
-
-                SpeechRecognizer.ERROR_NETWORK,
-                SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                    1000L
-
-                SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
-                    300L
-
-                else ->
-                    750L
-            }
-
-        return (
-                base *
-                        (
-                                1L shl
-                                        (speechErrorStreak - 1)
-                                            .coerceIn(0, 4)
-                                )
-                )
+    private fun commandRetryDelayMs(error: Int): Long {
+        val base = when (error) {
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+            SpeechRecognizer.ERROR_CLIENT,
+            SpeechRecognizer.ERROR_SERVER -> 500L
+            SpeechRecognizer.ERROR_NETWORK,
+            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> 1000L
+            SpeechRecognizer.ERROR_NO_MATCH,
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 300L
+            else -> 750L
+        }
+        return (base * (1L shl (speechErrorStreak - 1).coerceIn(0, 4)))
             .coerceAtMost(5000L)
     }
 
@@ -1290,32 +1287,26 @@ class NexusEyeWakeWordService : Service() {
     ) {
 
         if (destroyed) {
-
             Log.w(
                 TAG,
                 "Wake restart skipped: service destroyed"
             )
-
             return
         }
 
         if (commandProcessing) {
-
             Log.w(
                 TAG,
                 "Wake restart skipped: commandProcessing=true"
             )
-
             return
         }
 
         if (!hasMicrophonePermission()) {
-
             Log.e(
                 TAG,
                 "Wake restart skipped: RECORD_AUDIO missing"
             )
-
             return
         }
 
@@ -1349,11 +1340,8 @@ class NexusEyeWakeWordService : Service() {
             )
 
             try {
-
                 recognizer.cancel()
-
             } catch (e: Exception) {
-
                 Log.w(
                     TAG,
                     "SpeechRecognizer.cancel() failed",
@@ -1362,11 +1350,8 @@ class NexusEyeWakeWordService : Service() {
             }
 
             try {
-
                 recognizer.destroy()
-
             } catch (e: Exception) {
-
                 Log.w(
                     TAG,
                     "SpeechRecognizer.destroy() failed",
@@ -1392,8 +1377,7 @@ class NexusEyeWakeWordService : Service() {
             ).apply {
 
                 description =
-                    "Keeps Hey Nexus voice activation available " +
-                            "while NEXUS EYE is in the background."
+                    "Keeps Hey Nexus voice activation available while NEXUS EYE is in the background."
             }
 
         getSystemService(
@@ -1451,11 +1435,8 @@ class NexusEyeWakeWordService : Service() {
         )
 
         try {
-
             wakeWordDetector?.stop()
-
         } catch (e: Exception) {
-
             Log.w(
                 TAG,
                 "Wake detector stop failed during destroy",
@@ -1463,23 +1444,13 @@ class NexusEyeWakeWordService : Service() {
             )
         }
 
-        /*
-         * IMPORTANT:
-         * There is NO wakeWordDetector?.release() here.
-         *
-         * Your OpenWakeWord implementation exposes stop(), not release().
-         */
-
         wakeWordDetector = null
 
         destroyRecognizerOnly()
 
         try {
-
             ttsManager.shutdown()
-
         } catch (e: Exception) {
-
             Log.w(
                 TAG,
                 "TTS shutdown failed",
@@ -1511,56 +1482,51 @@ class NexusEyeWakeWordService : Service() {
             "hey_nexus.onnx"
 
         /*
-         * IMPORTANT FIX:
-         *
-         * OLD:
-         *     0.06f
-         *
-         * That was far too sensitive. Your logs showed false wake
-         * scores around 0.10 - 0.25.
-         *
-         * NEW:
-         *     0.50f
-         *
-         * Your trained model's validation positives were above ~0.95,
-         * so 0.50 gives us a much safer starting point.
+         * A single score spike must not activate the assistant. The value is
+         * deliberately much higher than the old 0.06 threshold.
          */
         private const val WAKE_WORD_THRESHOLD =
             0.50f
 
-        /*
-         * IMPORTANT FIX:
-         *
-         * Prevent repeated wake events during microphone/TTS handoff.
-         */
+        private const val WAKE_CONFIRMATION_FRAMES =
+            3
+
+        private const val WAKE_CONFIRMATION_PEAK_THRESHOLD =
+            0.60f
+
+        private const val WAKE_CONFIRMATION_MAX_GAP_MS =
+            700L
+
         private const val WAKE_WORD_DEBOUNCE_MS =
             3000L
 
         /*
-         * Short microphone handoff:
-         *
-         * OpenWakeWord stops first.
-         * SpeechRecognizer starts after this delay.
+         * OpenWakeWord must fully relinquish the microphone before Android's
+         * SpeechRecognizer is allowed to acquire it.
          */
         private const val MICROPHONE_HANDOFF_DELAY_MS =
-            50L
+            1200L
 
         private const val COMMAND_ERROR_RESTART_MS =
-            100L
+            1500L
 
         private const val TTS_RESTART_DELAY_MS =
-            100L
+            500L
 
         private const val DEFAULT_WAKE_RESTART_MS =
-            100L
+            1500L
 
         private const val WAKE_DETECTOR_RETRY_MS =
-            500L
+            1500L
+
+        private const val SPEECH_RECOGNIZER_FALLBACK_DELAY_MS =
+            750L
 
         /*
          * Avoid flooding Logcat with tiny wake scores.
+         * Scores >= 0.01 are shown.
          */
         private const val SCORE_LOG_THRESHOLD =
-            0.01f
+            0.10f
     }
 }
