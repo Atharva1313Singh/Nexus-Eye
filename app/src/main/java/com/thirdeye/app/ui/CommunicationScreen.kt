@@ -141,7 +141,7 @@ fun CommunicationScreen(
     ) {
 
         val message =
-            lastMessage.trim()
+            lastMessage?.trim().orEmpty()
 
         if (
             message.isBlank()
@@ -561,7 +561,7 @@ fun CommunicationScreen(
                     }
 
                     if (
-                        lastMessage.isNotEmpty()
+                        !lastMessage.isNullOrEmpty()
                     ) {
 
                         Card(
@@ -592,7 +592,7 @@ fun CommunicationScreen(
 
                                 Text(
                                     text =
-                                        lastMessage,
+                                        lastMessage.orEmpty(),
                                     style =
                                         MaterialTheme
                                             .typography
